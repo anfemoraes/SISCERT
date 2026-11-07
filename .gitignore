@@ -1,0 +1,15 @@
+# Ambientes e segredos
+.env
+*.env
+!.env.example
+
+# Dependências
+node_modules/
+
+# Builds
+dist/
+build/
+
+# Logs e arquivos do sistema
+*.log
+.DS_Store

@@ -1,0 +1,47 @@
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: siscert
+      POSTGRES_USER: siscert
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - siscert_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U siscert -d siscert"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  backend:
+    build: ./siscert-back-end
+    restart: unless-stopped
+    env_file:
+      - .env
+      - ./siscert-back-end/.env
+    environment:
+      DATABASE_URL: postgresql://siscert:${POSTGRES_PASSWORD}@db:5432/siscert
+      PORT: 3000
+      CORS_ORIGINS: http://localhost:8080
+      COOKIE_SECURE: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    command: sh -c "npm run db:migrate && npm start"
+
+  frontend:
+    build:
+      context: ./siscert-front-end
+      args:
+        VITE_API_URL: http://localhost:3000
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+
+volumes:
+  siscert_db:
