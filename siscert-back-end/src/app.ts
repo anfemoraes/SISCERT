@@ -12,7 +12,7 @@ import {
 } from 'fastify-type-provider-zod';
 import { certificacoesRoutes } from './modules/certificacoes/routes.js';
 import type { Db } from './modules/certificacoes/repository.js';
-import { ConflitoError } from './modules/certificacoes/service.js';
+import { ConflitoError, DadosInvalidosError } from './modules/certificacoes/service.js';
 import { criarExigirChave } from './shared/auth.js';
 import { criarExigirSessao } from './shared/session.js';
 import { authRoutes } from './modules/auth/routes.js';
@@ -56,7 +56,7 @@ export async function buildApp({
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
 
-  await app.register(cors, { origin: corsOrigins, credentials: true, methods: ['GET', 'POST', 'OPTIONS'] });
+  await app.register(cors, { origin: corsOrigins, credentials: true, methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] });
 
   // global: false -> cada rota declara o seu limite em config.rateLimit
   await app.register(rateLimit, {
@@ -92,6 +92,9 @@ export async function buildApp({
           mensagem: v.message ?? 'inválido',
         })),
       });
+    }
+    if (err instanceof DadosInvalidosError) {
+      return reply.code(400).send({ erro: err.message });
     }
     if (err instanceof ConflitoError) {
       return reply.code(409).send({ erro: err.message });

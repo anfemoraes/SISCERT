@@ -161,4 +161,78 @@ describe('API', () => {
     expect(codigos[0]).toBe('CAATR2025.0001');
     expect(codigos[19]).toBe('CAATR2025.0020');
   });
+
+  it('permite editar um certificado existente e exige autenticação', async () => {
+    const cad = await cadastrar(ata([concluinte(600, { resultado: 'REPROVADO' })]));
+    expect(cad.statusCode).toBe(201);
+    const item = cad.json()[0];
+    expect(item.id).toBeDefined();
+    expect(item.codigo).toBeNull();
+
+    // Sem chave: 401
+    const semChave = await app.inject({
+      method: 'PUT',
+      url: `/certificacoes/${item.id}`,
+      payload: { nome: 'Nome Alterado' },
+    });
+    expect(semChave.statusCode).toBe(401);
+
+    // Com chave: altera nome e resultado para APROVADO (gera código)
+    const comChave = await app.inject({
+      method: 'PUT',
+      url: `/certificacoes/${item.id}`,
+      headers: { 'x-api-key': CHAVE },
+      payload: { nome: 'Nome Alterado Com Sucesso', resultado: 'APROVADO' },
+    });
+    expect(comChave.statusCode).toBe(200);
+    expect(comChave.json().nome).toBe('Nome Alterado Com Sucesso');
+    expect(comChave.json().codigo).toMatch(/^CAAT2025\.\d{4}$/);
+
+    // ID inexistente: 404
+    const naoExiste = await app.inject({
+      method: 'PUT',
+      url: '/certificacoes/999999',
+      headers: { 'x-api-key': CHAVE },
+      payload: { nome: 'Outro' },
+    });
+    expect(naoExiste.statusCode).toBe(404);
+  });
+
+  it('permite excluir um certificado existente e exige autenticação', async () => {
+    const cad = await cadastrar(ata([concluinte(700)]));
+    expect(cad.statusCode).toBe(201);
+    const item = cad.json()[0];
+
+    // Sem chave: 401
+    const semChave = await app.inject({
+      method: 'DELETE',
+      url: `/certificacoes/${item.id}`,
+    });
+    expect(semChave.statusCode).toBe(401);
+
+    // Com chave: 200 e confirma exclusão
+    const del = await app.inject({
+      method: 'DELETE',
+      url: `/certificacoes/${item.id}`,
+      headers: { 'x-api-key': CHAVE },
+    });
+    expect(del.statusCode).toBe(200);
+    expect(del.json().ok).toBe(true);
+
+    // Buscar pelo ID ou verificar detalhe dá 404 agora
+    const getDepois = await app.inject({
+      method: 'GET',
+      url: `/certificacoes/detalhes/${item.id}`,
+      headers: { 'x-api-key': CHAVE },
+    });
+    expect(getDepois.statusCode).toBe(404);
+
+    // Excluir novamente: 404
+    const delRepetido = await app.inject({
+      method: 'DELETE',
+      url: `/certificacoes/${item.id}`,
+      headers: { 'x-api-key': CHAVE },
+    });
+    expect(delRepetido.statusCode).toBe(404);
+  });
 });

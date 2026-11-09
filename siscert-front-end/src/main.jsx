@@ -18,7 +18,10 @@ import {
   RefreshCw,
   Eye,
   EyeOff,
-  LockKeyhole
+  LockKeyhole,
+  Pencil,
+  AlertTriangle,
+  X
 } from 'lucide-react';
 import { LogoSiscert } from './LogoSiscert';
 import './styles.css';
@@ -510,6 +513,14 @@ function Dashboard({ user, go }) {
   const [summary, setSummary] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [editingCert, setEditingCert] = useState(null);
+  const [deletingCert, setDeletingCert] = useState(null);
+  const [toast, setToast] = useState('');
+
+  const showToast = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(''), 4000);
+  };
 
   const load = () => {
     setLoading(true);
@@ -522,6 +533,15 @@ function Dashboard({ user, go }) {
   useEffect(() => {
     load();
   }, []);
+
+  async function handleEditRecente(r) {
+    try {
+      const full = await api(`/certificacoes/detalhes/${r.id}`);
+      setEditingCert(full);
+    } catch (err) {
+      setError(err.message || 'Erro ao carregar detalhes do certificado');
+    }
+  }
 
   const nomeExibicao = user?.nome ? user.nome.split(' ')[0] : 'Administrador';
 
@@ -612,7 +632,7 @@ function Dashboard({ user, go }) {
         ) : (
           <div style={{ marginTop: '12px' }}>
             {summary.recentes.map((r, i) => (
-              <div className="row" key={`${r.codigo}-${i}`}>
+              <div className="row" key={`${r.id || r.codigo}-${i}`}>
                 <div className="row-icon">
                   <Award size={18} />
                 </div>
@@ -623,36 +643,456 @@ function Dashboard({ user, go }) {
                   </small>
                 </div>
                 <span className={`badge ${r.resultado === 'APROVADO' ? '' : 'bad'}`}>{r.resultado}</span>
+                {r.id && (
+                  <div style={{ marginLeft: '12px', display: 'flex', gap: '6px' }}>
+                    <button
+                      type="button"
+                      className="action-btn edit"
+                      onClick={() => handleEditRecente(r)}
+                      title="Editar certificado"
+                    >
+                      <Pencil size={13} /> Editar
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
         )}
       </section>
+
+      {editingCert && (
+        <EditCertificateModal
+          cert={editingCert}
+          onClose={() => setEditingCert(null)}
+          onSave={() => {
+            setEditingCert(null);
+            load();
+            showToast('Certificado atualizado com sucesso!');
+          }}
+        />
+      )}
+
+      {toast && (
+        <div className="toast success">
+          <CheckCircle2 size={18} />
+          <span>{toast}</span>
+        </div>
+      )}
     </>
   );
 }
 
 // -------------------------------------------------------------
-// CONSULTAR REGISTROS (PESQUISA DIRETA)
+// MODAIS DE EDIÇÃO E EXCLUSÃO
+// -------------------------------------------------------------
+function EditCertificateModal({ cert, onClose, onSave }) {
+  const [formData, setFormData] = useState({
+    nome: cert.nome || '',
+    cpf: cert.cpf || '',
+    cargoFuncao: cert.cargoFuncao || '',
+    municipio: cert.municipio || '',
+    curso: cert.curso || 'CFAT',
+    periodoInicio: cert.periodoInicio || '',
+    periodoFim: cert.periodoFim || '',
+    frequencia: cert.frequencia !== undefined && cert.frequencia !== null ? String(cert.frequencia) : '100',
+    notaAd: cert.notaAd !== undefined && cert.notaAd !== null ? String(cert.notaAd) : '',
+    notaOd: cert.notaOd !== undefined && cert.notaOd !== null ? String(cert.notaOd) : '',
+    notaAf: cert.notaAf !== undefined && cert.notaAf !== null ? String(cert.notaAf) : '',
+    mediaFinal: cert.mediaFinal !== undefined && cert.mediaFinal !== null ? String(cert.mediaFinal) : '',
+    resultado: cert.resultado || 'APROVADO',
+    observacoes: cert.observacoes || ''
+  });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const hasGrades = ['CFAT', 'CFATR'].includes(formData.curso);
+
+  function updateField(k, v) {
+    setFormData(prev => ({ ...prev, [k]: v }));
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+
+    const payload = {
+      nome: formData.nome.trim(),
+      cargoFuncao: formData.cargoFuncao.trim(),
+      municipio: formData.municipio.trim(),
+      curso: formData.curso,
+      periodoInicio: formData.periodoInicio,
+      periodoFim: formData.periodoFim,
+      frequencia: Number(formData.frequencia),
+      resultado: formData.resultado,
+      observacoes: formData.observacoes ? formData.observacoes.trim() : null
+    };
+
+    // Só envia CPF se o usuário digitou um novo (sem máscara de asteriscos)
+    if (formData.cpf && !formData.cpf.includes('*')) {
+      payload.cpf = formData.cpf.replace(/\D/g, '');
+    }
+
+    if (hasGrades) {
+      payload.notaAd = formData.notaAd === '' ? null : Number(formData.notaAd);
+      payload.notaOd = formData.notaOd === '' ? null : Number(formData.notaOd);
+      payload.notaAf = formData.notaAf === '' ? null : Number(formData.notaAf);
+      payload.mediaFinal = formData.mediaFinal === '' ? null : Number(formData.mediaFinal);
+    } else {
+      payload.notaAd = null;
+      payload.notaOd = null;
+      payload.notaAf = null;
+      payload.mediaFinal = null;
+    }
+
+    try {
+      const updated = await api(`/certificacoes/${cert.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload)
+      });
+      onSave(updated);
+    } catch (err) {
+      setError(err.message || 'Erro ao atualizar certificado');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-card" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <div>
+            <h2 style={{ margin: 0, fontSize: '18px', color: '#0f172a' }}>Editar Certificação</h2>
+            <small style={{ color: '#64748b', fontSize: '12px' }}>
+              Código Oficial: <strong style={{ color: '#2563eb' }}>{cert.codigo || 'Sem código'}</strong>
+            </small>
+          </div>
+          <button type="button" className="close-btn" onClick={onClose} aria-label="Fechar">
+            <X size={20} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+          <div className="modal-body">
+            {error && <div className="alert error" style={{ marginBottom: '16px' }}>{error}</div>}
+
+            <div style={{ display: 'grid', gap: '18px' }}>
+              <div>
+                <b style={{ fontSize: '13px', color: '#1e293b', display: 'block', marginBottom: '8px' }}>
+                  1. Dados do Concluinte
+                </b>
+                <div className="form-grid" style={{ marginTop: 0 }}>
+                  <label className="wide">
+                    Nome completo
+                    <input
+                      className="input"
+                      required
+                      minLength={3}
+                      maxLength={200}
+                      value={formData.nome}
+                      onChange={e => updateField('nome', e.target.value)}
+                    />
+                  </label>
+                  <label>
+                    CPF (digite apenas se for alterar)
+                    <input
+                      className="input"
+                      value={formData.cpf}
+                      onChange={e => updateField('cpf', e.target.value)}
+                      placeholder="000.000.000-00"
+                    />
+                  </label>
+                  <label>
+                    Cargo / Função
+                    <input
+                      className="input"
+                      required
+                      minLength={2}
+                      maxLength={120}
+                      value={formData.cargoFuncao}
+                      onChange={e => updateField('cargoFuncao', e.target.value)}
+                    />
+                  </label>
+                  <label>
+                    Frequência (%)
+                    <input
+                      className="input"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      required
+                      value={formData.frequencia}
+                      onChange={e => updateField('frequencia', e.target.value)}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <b style={{ fontSize: '13px', color: '#1e293b', display: 'block', marginBottom: '8px' }}>
+                  2. Curso e Período
+                </b>
+                <div className="form-grid" style={{ marginTop: 0 }}>
+                  <label>
+                    Curso homologado
+                    <select className="input" value={formData.curso} onChange={e => updateField('curso', e.target.value)}>
+                      {courses.map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Município
+                    <input
+                      className="input"
+                      required
+                      minLength={2}
+                      maxLength={120}
+                      value={formData.municipio}
+                      onChange={e => updateField('municipio', e.target.value)}
+                    />
+                  </label>
+                  <label>
+                    Data de Início
+                    <input
+                      className="input"
+                      type="date"
+                      required
+                      value={formData.periodoInicio}
+                      onChange={e => updateField('periodoInicio', e.target.value)}
+                    />
+                  </label>
+                  <label>
+                    Data de Conclusão
+                    <input
+                      className="input"
+                      type="date"
+                      required
+                      value={formData.periodoFim}
+                      onChange={e => updateField('periodoFim', e.target.value)}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <b style={{ fontSize: '13px', color: '#1e293b', display: 'block', marginBottom: '8px' }}>
+                  3. Avaliação e Resultado
+                </b>
+                <div className="form-grid" style={{ marginTop: 0 }}>
+                  {hasGrades && (
+                    <>
+                      <label>
+                        Nota AD
+                        <input
+                          className="input"
+                          type="number"
+                          min="0"
+                          max="10"
+                          step="0.01"
+                          required
+                          value={formData.notaAd}
+                          onChange={e => updateField('notaAd', e.target.value)}
+                        />
+                      </label>
+                      <label>
+                        Nota OD
+                        <input
+                          className="input"
+                          type="number"
+                          min="0"
+                          max="10"
+                          step="0.01"
+                          required
+                          value={formData.notaOd}
+                          onChange={e => updateField('notaOd', e.target.value)}
+                        />
+                      </label>
+                      <label>
+                        Nota AF
+                        <input
+                          className="input"
+                          type="number"
+                          min="0"
+                          max="10"
+                          step="0.01"
+                          required
+                          value={formData.notaAf}
+                          onChange={e => updateField('notaAf', e.target.value)}
+                        />
+                      </label>
+                      <label>
+                        Média Final
+                        <input
+                          className="input"
+                          type="number"
+                          min="0"
+                          max="10"
+                          step="0.01"
+                          required
+                          value={formData.mediaFinal}
+                          onChange={e => updateField('mediaFinal', e.target.value)}
+                        />
+                      </label>
+                    </>
+                  )}
+
+                  <label className="wide">
+                    Resultado Final
+                    <select className="input" value={formData.resultado} onChange={e => updateField('resultado', e.target.value)}>
+                      <option value="APROVADO">APROVADO (Possui / gera código oficial)</option>
+                      <option value="REPROVADO">REPROVADO (Sem emissão de código)</option>
+                    </select>
+                  </label>
+
+                  <label className="wide">
+                    Observações
+                    <textarea
+                      className="input"
+                      rows="2"
+                      maxLength={500}
+                      value={formData.observacoes}
+                      onChange={e => updateField('observacoes', e.target.value)}
+                      placeholder="Informações adicionais..."
+                    />
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="modal-footer">
+            <button type="button" className="secondary" onClick={onClose} disabled={busy}>
+              Cancelar
+            </button>
+            <button type="submit" className="primary" disabled={busy}>
+              {busy ? (
+                <>
+                  <LoaderCircle className="spin" size={17} /> Salvando alterações…
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 size={17} /> Salvar alterações
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function DeleteCertificateModal({ cert, onClose, onConfirm }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleDelete() {
+    setBusy(true);
+    setError('');
+    try {
+      await api(`/certificacoes/${cert.id}`, { method: 'DELETE' });
+      onConfirm(cert.id);
+    } catch (err) {
+      setError(err.message || 'Erro ao excluir certificado');
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-card" style={{ maxWidth: '520px' }} onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#fee2e2', color: '#dc2626', display: 'grid', placeItems: 'center' }}>
+              <AlertTriangle size={20} />
+            </div>
+            <div>
+              <h2 style={{ margin: 0, fontSize: '17px', color: '#0f172a' }}>Confirmar Exclusão</h2>
+              <small style={{ color: '#64748b' }}>Esta ação é irreversível</small>
+            </div>
+          </div>
+          <button type="button" className="close-btn" onClick={onClose} aria-label="Fechar">
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="modal-body">
+          {error && <div className="alert error" style={{ marginBottom: '14px' }}>{error}</div>}
+
+          <p style={{ margin: '0 0 16px 0', fontSize: '14px', color: '#334155', lineHeight: 1.5 }}>
+            Tem certeza que deseja excluir permanentemente a certificação de <b>{cert.nome}</b>?
+          </p>
+
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '14px', fontSize: '13px', display: 'grid', gap: '6px' }}>
+            <div><span style={{ color: '#64748b' }}>Código:</span> <b>{cert.codigo || 'Sem código'}</b></div>
+            <div><span style={{ color: '#64748b' }}>CPF:</span> <b>{cert.cpf}</b></div>
+            <div><span style={{ color: '#64748b' }}>Curso:</span> <b>{cert.curso} ({cert.municipio})</b></div>
+            <div><span style={{ color: '#64748b' }}>Resultado:</span> <b style={{ color: cert.resultado === 'APROVADO' ? '#16a34a' : '#dc2626' }}>{cert.resultado}</b></div>
+          </div>
+
+          <div className="alert error" style={{ marginTop: '16px', fontSize: '12px' }}>
+            Atenção: A exclusão removerá permanentemente este certificado da base do CETRAN/PA. Consultas públicas futuras deste código não encontrarão o registro.
+          </div>
+        </div>
+
+        <div className="modal-footer">
+          <button type="button" className="secondary" onClick={onClose} disabled={busy}>
+            Cancelar
+          </button>
+          <button type="button" className="danger-btn" onClick={handleDelete} disabled={busy}>
+            {busy ? (
+              <>
+                <LoaderCircle className="spin" size={17} /> Excluindo…
+              </>
+            ) : (
+              <>
+                <Trash2 size={17} /> Excluir definitivamente
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// -------------------------------------------------------------
+// CONSULTAR REGISTROS (PESQUISA DIRETA, EDIÇÃO E EXCLUSÃO)
 // -------------------------------------------------------------
 function Records() {
-  const [filters, setFilters] = useState({ nome: '', cpf: '', municipio: '', curso: '' });
+  const [filters, setFilters] = useState({ nome: '', cpf: '', municipio: '', curso: '', codigo: '' });
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [pagina, setPagina] = useState(1);
+  const [editingCert, setEditingCert] = useState(null);
+  const [deletingCert, setDeletingCert] = useState(null);
+  const [toast, setToast] = useState('');
 
-  async function search(e, pageNumber = 1) {
+  const showToast = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(''), 4000);
+  };
+
+  async function search(e, pageNumber = 1, showAll = false) {
     if (e) e.preventDefault();
     const params = new URLSearchParams();
-    Object.entries(filters).forEach(([k, v]) => {
-      if (v.trim()) params.set(k, v.trim());
-    });
+    if (showAll) {
+      params.set('todos', '1');
+    } else {
+      Object.entries(filters).forEach(([k, v]) => {
+        if (v.trim()) params.set(k, v.trim());
+      });
+    }
     params.set('pagina', String(pageNumber));
     params.set('tamanho', '20');
 
-    if (!params.has('nome') && !params.has('cpf') && !params.has('municipio') && !params.has('curso')) {
-      setError('Informe ao menos um critério para pesquisar (Nome, CPF ou Município).');
+    if (!showAll && !params.has('nome') && !params.has('cpf') && !params.has('municipio') && !params.has('curso') && !params.has('codigo')) {
+      setError('Informe ao menos um critério para pesquisar (Nome, CPF, Município, Curso ou Código) ou clique em "Listar todos".');
       return;
     }
 
@@ -692,17 +1132,21 @@ function Records() {
     <>
       <div className="page-heading">
         <div>
-          <p className="date">SISCERT · CONSULTA</p>
-          <h1>Consultar Certificados</h1>
-          <p className="subtitle">Pesquise agentes cadastrados por Nome, CPF ou Município.</p>
+          <p className="date">SISCERT · CONSULTA E GESTÃO</p>
+          <h1>Consultar e Gerenciar Certificados</h1>
+          <p className="subtitle">Pesquise agentes cadastrados, edite dados cadastrais e gerencie certificados homologados.</p>
         </div>
       </div>
 
       <form className="filter-card" onSubmit={search}>
-        <div className="filters">
+        <div className="filters" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
           <label>
             Nome do concluinte
             <input className="input" value={filters.nome} onChange={e => change('nome', e.target.value)} placeholder="Ex.: Maria da Silva" />
+          </label>
+          <label>
+            Código oficial
+            <input className="input" value={filters.codigo} onChange={e => change('codigo', e.target.value.toUpperCase())} placeholder="Ex.: CAAT2025.0001" />
           </label>
           <label>
             CPF
@@ -732,8 +1176,16 @@ function Records() {
           <button
             type="button"
             className="secondary"
+            disabled={busy}
+            onClick={() => search(undefined, 1, true)}
+          >
+            Listar todos
+          </button>
+          <button
+            type="button"
+            className="secondary"
             onClick={() => {
-              setFilters({ nome: '', cpf: '', municipio: '', curso: '' });
+              setFilters({ nome: '', cpf: '', municipio: '', curso: '', codigo: '' });
               setResult(null);
               setError('');
               setPagina(1);
@@ -749,7 +1201,7 @@ function Records() {
           <div>
             <h2>Resultados</h2>
             <p className="muted">
-              {result ? `${result.total} registro(s) encontrado(s)` : 'Informe os filtros acima para pesquisar.'}
+              {result ? `${result.total} registro(s) encontrado(s)` : 'Informe os filtros acima ou clique em "Listar todos" para exibir.'}
             </p>
           </div>
           {result?.itens?.length > 0 && (
@@ -760,7 +1212,7 @@ function Records() {
         </div>
 
         {!result ? (
-          <Empty text="Os registros encontrados na pesquisa aparecerão aqui." />
+          <Empty text="Os registros encontrados na pesquisa aparecerão aqui. Clique em 'Listar todos' para ver todos os certificados." />
         ) : !result.itens.length ? (
           <Empty text="Nenhum certificado encontrado para os critérios pesquisados." />
         ) : (
@@ -774,11 +1226,12 @@ function Records() {
                   <th>Município</th>
                   <th>Período</th>
                   <th>Resultado</th>
+                  <th style={{ textAlign: 'right' }}>Ações</th>
                 </tr>
               </thead>
               <tbody>
                 {result.itens.map((r, i) => (
-                  <tr key={`${r.codigo}-${i}`}>
+                  <tr key={`${r.id || r.codigo}-${i}`}>
                     <td className="code" style={{ fontSize: '13px' }}>
                       {r.codigo || '—'}
                     </td>
@@ -793,6 +1246,26 @@ function Records() {
                     </td>
                     <td>
                       <span className={`badge ${r.resultado === 'APROVADO' ? '' : 'bad'}`}>{r.resultado}</span>
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <div className="actions-cell" style={{ justifyContent: 'flex-end' }}>
+                        <button
+                          type="button"
+                          className="action-btn edit"
+                          onClick={() => setEditingCert(r)}
+                          title="Editar este certificado"
+                        >
+                          <Pencil size={13} /> Editar
+                        </button>
+                        <button
+                          type="button"
+                          className="action-btn delete"
+                          onClick={() => setDeletingCert(r)}
+                          title="Excluir este certificado"
+                        >
+                          <Trash2 size={13} /> Excluir
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -821,6 +1294,50 @@ function Records() {
           </div>
         )}
       </section>
+
+      {editingCert && (
+        <EditCertificateModal
+          cert={editingCert}
+          onClose={() => setEditingCert(null)}
+          onSave={(updated) => {
+            setResult(prev => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                itens: prev.itens.map(item => (item.id === updated.id ? updated : item))
+              };
+            });
+            setEditingCert(null);
+            showToast('Certificado atualizado com sucesso!');
+          }}
+        />
+      )}
+
+      {deletingCert && (
+        <DeleteCertificateModal
+          cert={deletingCert}
+          onClose={() => setDeletingCert(null)}
+          onConfirm={(id) => {
+            setResult(prev => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                total: Math.max(0, prev.total - 1),
+                itens: prev.itens.filter(item => item.id !== id)
+              };
+            });
+            setDeletingCert(null);
+            showToast('Certificado excluído com sucesso!');
+          }}
+        />
+      )}
+
+      {toast && (
+        <div className="toast success">
+          <CheckCircle2 size={18} />
+          <span>{toast}</span>
+        </div>
+      )}
     </>
   );
 }

@@ -82,6 +82,7 @@ export const ataSchema = z
 export type AtaInput = z.infer<typeof ataSchema>;
 
 export const certificacaoSchema = z.object({
+  id: z.number(),
   codigo: z.string().nullable(),
   curso: z.enum(CURSOS),
   municipio: z.string(),
@@ -118,12 +119,56 @@ export const buscaSchema = z
       .refine((v) => v === undefined || v.length === 11, { message: 'CPF deve ter 11 dígitos' }),
     municipio: z.string().trim().min(2).optional(),
     curso: z.enum(CURSOS).optional(),
+    codigo: z.string().trim().optional(),
+    todos: z.string().optional(),
     pagina: z.coerce.number().int().min(1).default(1),
     tamanho: z.coerce.number().int().min(1).max(100).default(20),
   })
-  .refine((q) => q.nome || q.cpf || q.municipio || q.curso, {
-    message: 'Informe ao menos um filtro: nome, cpf, município ou curso',
+  .refine((q) => q.nome || q.cpf || q.municipio || q.curso || q.codigo || q.todos, {
+    message: 'Informe ao menos um filtro: nome, cpf, município, curso ou código',
   });
+
+export const idParamsSchema = z.object({
+  id: z.coerce.number().int().positive({ message: 'ID deve ser um número positivo' }),
+});
+
+export const atualizarCertificacaoSchema = z
+  .object({
+    nome: texto(3, 200).optional(),
+    cargoFuncao: texto(2, 120).optional(),
+    cpf: z
+      .string()
+      .transform(soDigitos)
+      .refine(cpfValido, { message: 'CPF inválido' })
+      .optional(),
+    municipio: texto(2, 120).optional(),
+    curso: z.enum(CURSOS).optional(),
+    periodoInicio: z.iso.date().optional(),
+    periodoFim: z.iso.date().optional(),
+    frequencia: z.number().min(0).max(100).optional(),
+    notaAd: nota.nullable().optional(),
+    notaOd: nota.nullable().optional(),
+    notaAf: nota.nullable().optional(),
+    mediaFinal: nota.nullable().optional(),
+    resultado: z.enum(['APROVADO', 'REPROVADO']).optional(),
+    observacoes: z.string().trim().max(500).nullable().optional(),
+  })
+  .superRefine((dados, ctx) => {
+    if (dados.periodoInicio && dados.periodoFim && dados.periodoFim < dados.periodoInicio) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['periodoFim'],
+        message: 'periodoFim não pode ser anterior a periodoInicio',
+      });
+    }
+  });
+
+export type AtualizarCertificacaoInput = z.infer<typeof atualizarCertificacaoSchema>;
+
+export const exclusaoRespostaSchema = z.object({
+  ok: z.boolean(),
+  mensagem: z.string(),
+});
 
 export const codigoParamsSchema = z.object({
   codigo: z

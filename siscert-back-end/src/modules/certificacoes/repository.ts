@@ -39,6 +39,8 @@ export interface FiltrosBusca {
   cpf?: string | undefined;
   municipio?: string | undefined;
   curso?: Curso | undefined;
+  codigo?: string | undefined;
+  todos?: string | undefined;
   pagina: number;
   tamanho: number;
 }
@@ -53,7 +55,8 @@ export async function buscar(db: Db, f: FiltrosBusca) {
   }
   if (f.cpf) cond.push(eq(certificacoes.cpf, f.cpf));
   if (f.curso) cond.push(eq(certificacoes.curso, f.curso));
-  const where = and(...cond);
+  if (f.codigo) cond.push(eq(certificacoes.codigo, f.codigo.toUpperCase()));
+  const where = cond.length > 0 ? and(...cond) : undefined;
 
   const [contagem] = await db.select({ total: count() }).from(certificacoes).where(where);
   const itens = await db
@@ -70,4 +73,27 @@ export async function buscar(db: Db, f: FiltrosBusca) {
 export async function porCodigo(db: Db, codigo: string): Promise<LinhaCertificacao | undefined> {
   const [linha] = await db.select().from(certificacoes).where(eq(certificacoes.codigo, codigo));
   return linha;
+}
+
+export async function porId(db: Db, id: number): Promise<LinhaCertificacao | undefined> {
+  const [linha] = await db.select().from(certificacoes).where(eq(certificacoes.id, id));
+  return linha;
+}
+
+export async function atualizar(
+  db: Db,
+  id: number,
+  valores: Partial<NovaLinha>,
+): Promise<LinhaCertificacao | undefined> {
+  const [linha] = await db
+    .update(certificacoes)
+    .set(valores)
+    .where(eq(certificacoes.id, id))
+    .returning();
+  return linha;
+}
+
+export async function excluir(db: Db, id: number): Promise<boolean> {
+  const resultado = await db.delete(certificacoes).where(eq(certificacoes.id, id)).returning({ id: certificacoes.id });
+  return resultado.length > 0;
 }
