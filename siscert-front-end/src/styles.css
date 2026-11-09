@@ -5,3 +5,9 @@
 
 .pagination{display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:1px solid #eff2f6;padding-top:16px;margin-top:15px;color:#8793a3;font-size:11px}.pagination>div{display:flex;gap:8px}.pagination .secondary{padding:9px 12px;font-size:11px}
 @media(max-width:760px){.pagination{align-items:flex-start;flex-direction:column}}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+

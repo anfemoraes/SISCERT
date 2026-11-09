@@ -13,3 +13,4 @@ build/
 # Logs e arquivos do sistema
 *.log
 .DS_Store
+linkedin-mcpserver/
