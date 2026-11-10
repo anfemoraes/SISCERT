@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { lazy, Suspense, useState, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   LayoutDashboard,
   PlusCircle,
   Search,
   ShieldCheck,
-  Award,
   CheckCircle2,
   XCircle,
   Download,
@@ -20,14 +19,18 @@ import {
   EyeOff,
   LockKeyhole,
   Pencil,
+  Mail,
   AlertTriangle,
   X
 } from 'lucide-react';
 import { LogoSiscert } from './LogoSiscert';
+import emptyCertificatesImage from './assets/illustrations/empty-certificates.png';
+import emptySearchResultsImage from './assets/illustrations/empty-search-results.png';
 import './styles.css';
 
 const API = (import.meta.env.VITE_API_URL || 'http://localhost:3000').replace(/\/$/, '');
 const courses = ['CFAT', 'CFATR', 'CAAT', 'CAATR'];
+const DashboardCharts = lazy(() => import('./DashboardCharts'));
 
 // Navegação simplificada e focada nos objetivos centrais
 const navItems = [
@@ -62,6 +65,7 @@ function App() {
   const [publicMode, setPublicMode] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
+  const userMenuButtonRef = useRef(null);
 
   useEffect(() => {
     api('/auth/me')
@@ -98,7 +102,7 @@ function App() {
   if (checking) {
     return (
       <div className="center-screen">
-        <LoaderCircle className="spin" size={28} />
+        <LoaderCircle className="spin" size={28} aria-hidden="true" />
         <span style={{ fontSize: '15px', fontWeight: 500 }}>Carregando SISCERT…</span>
       </div>
     );
@@ -116,269 +120,135 @@ function App() {
 
   return (
     <div className="app">
-      {/* Sidebar Lateral */}
-      <aside className={`sidebar ${mobile ? 'open' : ''}`}>
-        <div className="brand" style={{ padding: '4px 8px 24px', borderBottom: '1px solid #f1f5f9', marginBottom: '18px' }}>
-          <LogoSiscert size={44} />
+      <header className="app-header">
+        <button
+          type="button"
+          className="mobile-menu"
+          onClick={() => setMobile(!mobile)}
+          aria-label={mobile ? 'Fechar menu' : 'Abrir menu'}
+          aria-expanded={mobile}
+          aria-controls="primary-navigation"
+        >
+          <Menu size={22} aria-hidden="true" />
+        </button>
+
+        <div className="app-header-brand">
+          <LogoSiscert size={38} showCetran />
         </div>
 
-        <div className="nav-label" style={{ padding: '0 12px 10px', fontSize: '11px', color: '#64748b', fontWeight: 700 }}>
-          MENU PRINCIPAL
-        </div>
-
-        <nav style={{ display: 'grid', gap: '6px' }}>
-          {navItems.map(([name, Icon]) => (
-            <button
-              key={name}
-              className={page === name ? 'selected' : ''}
-              onClick={() => {
-                setPage(name);
-                setMobile(false);
-              }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                padding: '12px 14px',
-                borderRadius: '10px',
-                border: 'none',
-                fontWeight: 600,
-                fontSize: '13.5px',
-                cursor: 'pointer'
-              }}
-            >
-              <Icon size={19} />
-              <span>{name}</span>
-            </button>
-          ))}
-        </nav>
-
-        {/* Rodapé da Sidebar */}
-        <div style={{ marginTop: 'auto', paddingTop: '16px', borderTop: '1px solid #f1f5f9' }}>
+        <div
+          className="top-actions"
+          ref={dropdownRef}
+          onKeyDown={event => {
+            if (event.key === 'Escape' && dropdownOpen) {
+              setDropdownOpen(false);
+              userMenuButtonRef.current?.focus();
+            }
+          }}
+        >
           <button
-            onClick={handleLogout}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              width: '100%',
-              padding: '11px 14px',
-              background: 'transparent',
-              border: 'none',
-              borderRadius: '10px',
-              color: '#ef4444',
-              cursor: 'pointer',
-              fontWeight: 600,
-              fontSize: '13px',
-              transition: 'background 0.15s ease'
-            }}
-            onMouseEnter={e => e.currentTarget.style.background = '#fef2f2'}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            ref={userMenuButtonRef}
+            type="button"
+            onClick={() => setDropdownOpen(!dropdownOpen)}
+            aria-label="Menu do usuário"
+            aria-expanded={dropdownOpen}
+            aria-haspopup="true"
+            aria-controls="user-dropdown"
+            className={`user-menu-trigger${dropdownOpen ? ' is-open' : ''}`}
           >
-            <LogOut size={18} />
-            <span>Sair do sistema</span>
-          </button>
-          
-          <div style={{ marginTop: '14px', padding: '10px 12px', background: '#f8fafc', borderRadius: '10px', fontSize: '11px', color: '#64748b' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: '#334155' }}>
-              <ShieldCheck size={14} color="#16a34a" /> SISCERT Oficial
+            <span className="user-avatar">{userInitials}</span>
+            <div className="user-menu-copy">
+              <span>{user.nome ? user.nome.split(' ')[0] : 'Admin'}</span>
+              <small>{user.perfil || 'Administrador'}</small>
             </div>
-            <div style={{ marginTop: '3px' }}>Resolução 004/2025 · CETRAN/PA</div>
-          </div>
-        </div>
-      </aside>
-
-      {/* Área Principal */}
-      <main className="main">
-        {/* Topbar com div de usuário igual ao Radar 2030 */}
-        <header className="topbar">
-          <button className="mobile-menu" onClick={() => setMobile(!mobile)}>
-            <Menu size={22} />
+            <ChevronDown className="user-menu-chevron" size={16} aria-hidden="true" />
           </button>
-          
-          <div className="crumb" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <b style={{ color: '#1e3a8a', fontSize: '13px' }}>SISCERT</b>
-            <span style={{ color: '#cbd5e1' }}>/</span>
-            <span style={{ color: '#475569', fontWeight: 600 }}>{page}</span>
-          </div>
 
-          {/* Div do usuário no canto superior direito (Estilo Radar 2030) */}
-          <div className="top-actions" ref={dropdownRef} style={{ position: 'relative' }}>
-            <button
-              type="button"
-              onClick={() => setDropdownOpen(!dropdownOpen)}
-              aria-label="Menu do usuário"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.55rem',
-                background: dropdownOpen ? '#f1f5f9' : '#ffffff',
-                border: '1px solid #e2e8f0',
-                borderRadius: '999px',
-                padding: '0.28rem 0.75rem 0.28rem 0.32rem',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
-              }}
-            >
-              {/* Avatar circular com gradiente do Radar 2030 */}
-              <span
-                style={{
-                  width: '34px',
-                  height: '34px',
-                  borderRadius: '50%',
-                  background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
-                  color: '#ffffff',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontWeight: 700,
-                  fontSize: '0.82rem',
-                  flexShrink: 0
-                }}
-              >
-                {userInitials}
-              </span>
-
-              <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'left', lineHeight: 1.15 }}>
-                <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#1e293b' }}>
-                  {user.nome ? user.nome.split(' ')[0] : 'Admin'}
-                </span>
-                <span style={{ fontSize: '0.68rem', color: '#64748b' }}>
-                  {user.perfil || 'Administrador'}
-                </span>
-              </div>
-
-              {/* Ícone de seta com rotação */}
-              <ChevronDown
-                size={14}
-                style={{
-                  color: '#64748b',
-                  transition: 'transform 0.2s ease',
-                  transform: dropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-                  marginLeft: '2px'
-                }}
-              />
-            </button>
-
-            {/* Dropdown Menu Flutuante */}
-            {dropdownOpen && (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 'calc(100% + 8px)',
-                  right: 0,
-                  minWidth: '250px',
-                  background: '#ffffff',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '12px',
-                  boxShadow: '0 10px 25px rgba(0, 0, 0, 0.1)',
-                  padding: '0.5rem',
-                  zIndex: 1001,
-                  animation: 'fadeIn 0.15s ease'
-                }}
-              >
-                {/* Cabeçalho do usuário no dropdown */}
-                <div style={{ padding: '0.75rem', borderBottom: '1px solid #f1f5f9', marginBottom: '0.35rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-                    <span
-                      style={{
-                        width: '38px',
-                        height: '38px',
-                        borderRadius: '50%',
-                        background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
-                        color: '#ffffff',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontWeight: 700,
-                        fontSize: '0.9rem',
-                        flexShrink: 0
-                      }}
-                    >
-                      {userInitials}
-                    </span>
-                    <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.25, overflow: 'hidden' }}>
-                      <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {user.nome || 'Administrador SISCERT'}
-                      </span>
-                      <span style={{ fontSize: '0.74rem', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {user.email}
-                      </span>
-                    </div>
+          {dropdownOpen && (
+            <div id="user-dropdown" className="user-dropdown">
+              <div className="user-dropdown-header">
+                <div className="user-dropdown-person">
+                  <span className="user-avatar user-avatar-large">{userInitials}</span>
+                  <div className="user-dropdown-copy">
+                    <span>{user.nome || 'Administrador SISCERT'}</span>
+                    <small>{user.email}</small>
                   </div>
                 </div>
-
-                {/* Ações do Dropdown */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPage('Validar autenticidade');
-                    setDropdownOpen(false);
-                  }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.6rem',
-                    width: '100%',
-                    padding: '0.6rem 0.75rem',
-                    background: 'transparent',
-                    border: 'none',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    color: '#334155',
-                    fontSize: '0.86rem',
-                    fontWeight: 500,
-                    textAlign: 'left'
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                >
-                  <ShieldCheck size={16} color="#2563eb" />
-                  <span>Validar certificado por código</span>
-                </button>
-
-                <div style={{ height: '1px', background: '#f1f5f9', margin: '0.35rem 0' }} />
-
-                {/* Botão Sair */}
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.6rem',
-                    width: '100%',
-                    padding: '0.6rem 0.75rem',
-                    background: 'transparent',
-                    border: 'none',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    color: '#e11d48',
-                    fontSize: '0.86rem',
-                    fontWeight: 600,
-                    textAlign: 'left',
-                    transition: 'background 0.15s ease'
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.background = '#fff1f2'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                >
-                  <LogOut size={16} />
-                  <span>Sair do sistema</span>
-                </button>
               </div>
-            )}
-          </div>
-        </header>
 
-        {/* Conteúdo Central */}
-        <section className="content">
-          {page === 'Visão geral' && <Dashboard user={user} go={setPage} />}
-          {page === 'Emitir certificados' && <NewAta onDone={() => setPage('Consultar certificados')} />}
-          {page === 'Consultar certificados' && <Records />}
-          {page === 'Validar autenticidade' && <PublicValidation embedded onBack={() => setPage('Visão geral')} />}
-        </section>
-      </main>
+              <button
+                type="button"
+                onClick={() => {
+                  setPage('Validar autenticidade');
+                  setDropdownOpen(false);
+                }}
+                className="user-dropdown-action"
+              >
+                <ShieldCheck size={16} aria-hidden="true" />
+                <span>Validar certificado por código</span>
+              </button>
+
+              <div className="user-dropdown-divider" />
+
+              <button type="button" onClick={handleLogout} className="user-dropdown-action logout">
+                <LogOut size={16} aria-hidden="true" />
+                <span>Sair do sistema</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </header>
+
+      <div className="app-layout">
+        <aside id="primary-navigation" className={`sidebar ${mobile ? 'open' : ''}`} aria-label="Navegação principal">
+          <div className="nav-label">MENU PRINCIPAL</div>
+
+          <nav aria-label="Menu principal">
+            {navItems.map(([name, Icon]) => (
+              <button
+                key={name}
+                className={page === name ? 'selected' : ''}
+                type="button"
+                aria-current={page === name ? 'page' : undefined}
+                onClick={() => {
+                  setPage(name);
+                  setMobile(false);
+                }}
+              >
+                <Icon size={19} aria-hidden="true" />
+                <span>{name}</span>
+              </button>
+            ))}
+          </nav>
+
+          <div className="sidebar-footer">
+            <button type="button" className="sidebar-logout" onClick={handleLogout}>
+              <LogOut size={18} aria-hidden="true" />
+              <span>Sair do sistema</span>
+            </button>
+
+          </div>
+        </aside>
+
+        <main className="main">
+          <section className="content">
+            <nav className="breadcrumb" aria-label="Você está em">
+              <button type="button" onClick={() => setPage('Visão geral')}>Início</button>
+              <span aria-hidden="true">/</span>
+              <span aria-current="page">{page}</span>
+            </nav>
+            {page === 'Visão geral' && <Dashboard user={user} go={setPage} />}
+            {page === 'Emitir certificados' && <NewAta onDone={() => setPage('Consultar certificados')} />}
+            {page === 'Consultar certificados' && <Records />}
+            {page === 'Validar autenticidade' && <PublicValidation embedded onBack={() => setPage('Visão geral')} />}
+          </section>
+
+          <footer className="app-footer">
+            <span>SISCERT · CETRAN/PA</span>
+            <span>Conselho Estadual de Trânsito do Pará · Resolução 004/2025</span>
+          </footer>
+        </main>
+      </div>
     </div>
   );
 }
@@ -414,7 +284,7 @@ function Login({ onSuccess, onPublic }) {
     <div className="login-screen">
       <div className="login-art">
         <div style={{ marginBottom: 'auto' }}>
-          <LogoSiscert size={56} light />
+          <LogoSiscert size={56} light showCetran />
         </div>
 
         <div className="art-copy">
@@ -445,8 +315,9 @@ function Login({ onSuccess, onPublic }) {
             Entre com suas credenciais do SISCERT.
           </p>
 
-          <label className="field-label">E-mail institucional</label>
+          <label className="field-label login-email-label" htmlFor="login-email"><Mail size={16} aria-hidden="true" /> E-mail institucional</label>
           <input
+            id="login-email"
             className="input"
             type="email"
             autoComplete="username"
@@ -456,9 +327,10 @@ function Login({ onSuccess, onPublic }) {
             required
           />
 
-          <label className="field-label">Senha</label>
+          <label className="field-label" htmlFor="login-password">Senha</label>
           <div className="password-wrap">
             <input
+              id="login-password"
               className="input"
               type={show ? 'text' : 'password'}
               autoComplete="current-password"
@@ -467,7 +339,13 @@ function Login({ onSuccess, onPublic }) {
               onChange={e => setSenha(e.target.value)}
               required
             />
-            <button type="button" className="reveal" onClick={() => setShow(!show)}>
+            <button
+              type="button"
+              className="reveal"
+              onClick={() => setShow(!show)}
+              aria-label={show ? 'Ocultar senha' : 'Mostrar senha'}
+              aria-pressed={show}
+            >
               {show ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
           </div>
@@ -477,7 +355,7 @@ function Login({ onSuccess, onPublic }) {
           <button className="primary full" disabled={busy} style={{ marginTop: '20px', padding: '13px' }}>
             {busy ? (
               <>
-                <LoaderCircle className="spin" size={18} /> Entrando…
+                <LoaderCircle className="spin" size={18} aria-hidden="true" /> Entrando…
               </>
             ) : (
               'Entrar no sistema'
@@ -511,6 +389,7 @@ function Login({ onSuccess, onPublic }) {
 // -------------------------------------------------------------
 function Dashboard({ user, go }) {
   const [summary, setSummary] = useState(null);
+  const [summaryView, setSummaryView] = useState('cards');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [editingCert, setEditingCert] = useState(null);
@@ -544,114 +423,130 @@ function Dashboard({ user, go }) {
   }
 
   const nomeExibicao = user?.nome ? user.nome.split(' ')[0] : 'Administrador';
-
   return (
     <>
-      {/* Banner de Boas-Vindas personalizado */}
-      <div className="welcome" style={{ padding: '28px 32px' }}>
-        <div>
-          <p className="date" style={{ color: '#2563eb', letterSpacing: '1.5px', marginBottom: '8px', fontWeight: 700 }}>
-            SISTEMA OFICIAL DE CERTIFICAÇÃO
-          </p>
-          <h1 style={{ fontSize: '28px', margin: '0 0 8px 0', color: '#0f172a' }}>
-            Bem-vindo, {nomeExibicao}!
-          </h1>
-          <p className="subtitle" style={{ margin: 0, fontSize: '14px', color: '#64748b' }}>
-            Gerencie emissões de certificações de cursos de trânsito e confira a autenticidade dos registros.
-          </p>
+      <section className="dashboard-welcome">
+        <div className="dashboard-welcome-copy">
+          <p className="dashboard-eyebrow">SISCERT · CETRAN/PA</p>
+          <h1>Bem-vindo, {nomeExibicao}!</h1>
+          <p>Gerencie as certificações e acompanhe os registros do sistema em um só lugar.</p>
         </div>
-
-        {/* Botões de Ação Imediata */}
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          <button className="primary" onClick={() => go('Emitir certificados')} style={{ padding: '12px 18px', fontSize: '13.5px' }}>
+        <div className="dashboard-actions">
+          <button className="primary" onClick={() => go('Emitir certificados')}>
             <PlusCircle size={18} /> Emitir certificados
           </button>
-          <button className="secondary" onClick={() => go('Validar autenticidade')} style={{ padding: '12px 16px', fontSize: '13.5px' }}>
+          <button className="secondary" onClick={() => go('Validar autenticidade')}>
             <ShieldCheck size={18} color="#2563eb" /> Validar código
           </button>
         </div>
-      </div>
+      </section>
 
       {error && <div className="alert error">{error}</div>}
 
-      {/* Cards de Métricas Diretas */}
-      <div className="stats" style={{ margin: '22px 0' }}>
-        <div className="stat">
-          <div className="stat-icon blue">
-            <Award size={24} />
-          </div>
-          <div>
-            <p>Total de Registros</p>
-            <strong>{summary?.total ?? '0'}</strong>
-            <small>Atas processadas</small>
-          </div>
+      <section className="dashboard-summary" aria-label="Resumo das certificações">
+        <div className="dashboard-view-toggle" role="group" aria-label="Visualização dos indicadores">
+          <button
+            type="button"
+            aria-pressed={summaryView === 'cards'}
+            onClick={() => setSummaryView('cards')}
+          >
+            Resumo em cards
+          </button>
+          <button
+            type="button"
+            aria-pressed={summaryView === 'charts'}
+            onClick={() => setSummaryView('charts')}
+          >
+            Indicadores do sistema
+          </button>
         </div>
 
-        <div className="stat">
-          <div className="stat-icon green">
-            <CheckCircle2 size={24} />
-          </div>
-          <div>
-            <p>Agentes Aprovados</p>
-            <strong>{summary?.aprovados ?? '0'}</strong>
-            <small style={{ color: '#16a34a' }}>Com código gerado</small>
-          </div>
-        </div>
+        {summaryView === 'cards' ? (
+          <section className="dashboard-stats" aria-label="Resumo em cards">
+            <article className="dashboard-stat dashboard-stat-blue">
+              <div className="dashboard-stat-copy">
+                <p>Total de registros</p>
+                <strong>{loading ? '—' : summary?.total ?? '0'}</strong>
+                <small>{loading ? 'Carregando dados' : 'Atas processadas'}</small>
+              </div>
+            </article>
 
-        <div className="stat">
-          <div className="stat-icon purple">
-            <XCircle size={24} />
-          </div>
-          <div>
-            <p>Reprovados</p>
-            <strong>{summary?.reprovados ?? '0'}</strong>
-            <small style={{ color: '#64748b' }}>Sem emissão de código</small>
-          </div>
-        </div>
-      </div>
+            <article className="dashboard-stat dashboard-stat-green">
+              <div className="dashboard-stat-copy">
+                <p>Agentes aprovados</p>
+                <strong>{loading ? '—' : summary?.aprovados ?? '0'}</strong>
+                <small>{loading ? 'Carregando dados' : 'Com código gerado'}</small>
+              </div>
+            </article>
 
-      {/* Registros Recentes */}
-      <section className="panel recent-panel" style={{ marginTop: '22px' }}>
-        <div className="panel-heading">
-          <div>
-            <h2 style={{ fontSize: '17px', margin: 0, color: '#0f172a' }}>Últimas Certificações Emitidas</h2>
-            <p className="muted" style={{ marginTop: '4px' }}>Concluintes cadastrados recentemente no sistema</p>
-          </div>
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <button className="secondary" onClick={load} title="Atualizar">
-              <RefreshCw size={15} /> Atualizar
-            </button>
-            <button className="text-button" onClick={() => go('Consultar certificados')} style={{ cursor: 'pointer', fontSize: '13.5px' }}>
-              Ver todos os registros →
-            </button>
-          </div>
-        </div>
-
-        {!summary?.recentes?.length ? (
-          <Empty text="Nenhum registro encontrado ainda. Clique em 'Emitir certificados' para cadastrar a primeira ata." />
+            <article className="dashboard-stat dashboard-stat-purple">
+              <div className="dashboard-stat-copy">
+                <p>Reprovados</p>
+                <strong>{loading ? '—' : summary?.reprovados ?? '0'}</strong>
+                <small>{loading ? 'Carregando dados' : 'Sem emissão de código'}</small>
+              </div>
+            </article>
+          </section>
         ) : (
-          <div style={{ marginTop: '12px' }}>
+          <section className="dashboard-charts" aria-label="Gráficos do resumo das certificações">
+            <Suspense fallback={<div className="dashboard-chart-state" role="status">Carregando gráficos…</div>}>
+              <DashboardCharts summary={summary} loading={loading} />
+            </Suspense>
+          </section>
+        )}
+      </section>
+
+      <section className="dashboard-recent">
+        <div className="dashboard-recent-heading">
+          <div className="dashboard-recent-title">
+            <div>
+              <h2>Certificações recentes</h2>
+              <p>Últimos concluintes cadastrados no sistema</p>
+            </div>
+          </div>
+          <div className="dashboard-recent-actions">
+            <button className="secondary" onClick={load} title="Atualizar registros recentes" disabled={loading}>
+              <RefreshCw size={15} className={loading ? 'spin' : ''} /> Atualizar
+            </button>
+            <button className="text-button dashboard-view-all" onClick={() => go('Consultar certificados')}>
+              Ver todos <span aria-hidden="true">→</span>
+            </button>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="dashboard-loading" role="status">Carregando certificações recentes…</div>
+        ) : !summary?.recentes?.length ? (
+          <Empty
+            image={emptyCertificatesImage}
+            text="Ainda não há certificações cadastradas. Emita uma ata para começar."
+          />
+        ) : (
+          <div className="dashboard-recent-list">
             {summary.recentes.map((r, i) => (
-              <div className="row" key={`${r.id || r.codigo}-${i}`}>
-                <div className="row-icon">
-                  <Award size={18} />
+              <div className="dashboard-recent-row" key={`${r.id || r.codigo}-${i}`}>
+                <div className={`dashboard-person-avatar avatar-tone-${i % 5}`} aria-hidden="true">
+                  {getInitials(r.nome)}
                 </div>
-                <div className="row-main">
+                <div className="dashboard-recent-main">
                   <b>{r.nome}</b>
                   <small>
                     <b>{r.codigo || 'Sem código'}</b> · {r.curso} · {r.municipio}
                   </small>
                 </div>
-                <span className={`badge ${r.resultado === 'APROVADO' ? '' : 'bad'}`}>{r.resultado}</span>
+                <span className={`dashboard-result ${r.resultado === 'APROVADO' ? 'approved' : 'rejected'}`}>
+                  {r.resultado === 'REPROVADO' && <XCircle size={14} aria-hidden="true" />}
+                  {r.resultado}
+                </span>
                 {r.id && (
-                  <div style={{ marginLeft: '12px', display: 'flex', gap: '6px' }}>
+                  <div className="dashboard-row-actions">
                     <button
                       type="button"
                       className="action-btn edit"
                       onClick={() => handleEditRecente(r)}
                       title="Editar certificado"
                     >
-                      <Pencil size={13} /> Editar
+                      <Pencil size={14} aria-hidden="true" /> Editar
                     </button>
                   </div>
                 )}
@@ -706,7 +601,7 @@ function EditCertificateModal({ cert, onClose, onSave }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  const hasGrades = ['CFAT', 'CFATR'].includes(formData.curso);
+  const requiresGrades = ['CFAT', 'CFATR'].includes(formData.curso);
 
   function updateField(k, v) {
     setFormData(prev => ({ ...prev, [k]: v }));
@@ -734,17 +629,10 @@ function EditCertificateModal({ cert, onClose, onSave }) {
       payload.cpf = formData.cpf.replace(/\D/g, '');
     }
 
-    if (hasGrades) {
-      payload.notaAd = formData.notaAd === '' ? null : Number(formData.notaAd);
-      payload.notaOd = formData.notaOd === '' ? null : Number(formData.notaOd);
-      payload.notaAf = formData.notaAf === '' ? null : Number(formData.notaAf);
-      payload.mediaFinal = formData.mediaFinal === '' ? null : Number(formData.mediaFinal);
-    } else {
-      payload.notaAd = null;
-      payload.notaOd = null;
-      payload.notaAf = null;
-      payload.mediaFinal = null;
-    }
+    payload.notaAd = formData.notaAd === '' ? null : Number(formData.notaAd);
+    payload.notaOd = formData.notaOd === '' ? null : Number(formData.notaOd);
+    payload.notaAf = formData.notaAf === '' ? null : Number(formData.notaAf);
+    payload.mediaFinal = formData.mediaFinal === '' ? null : Number(formData.mediaFinal);
 
     try {
       const updated = await api(`/certificacoes/${cert.id}`, {
@@ -791,6 +679,7 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                       required
                       minLength={3}
                       maxLength={200}
+                      autoComplete="name"
                       value={formData.nome}
                       onChange={e => updateField('nome', e.target.value)}
                     />
@@ -800,9 +689,14 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                     <input
                       className="input"
                       value={formData.cpf}
-                      onChange={e => updateField('cpf', e.target.value)}
+                      onChange={e => updateField('cpf', formatCpf(e.target.value))}
                       placeholder="000.000.000-00"
+                      inputMode="numeric"
+                      maxLength={14}
+                      pattern={formData.cpf.includes('*') ? undefined : '[0-9]{3}[.][0-9]{3}[.][0-9]{3}-[0-9]{2}'}
+                      title="Informe um CPF no formato 000.000.000-00"
                     />
+                    <small className="field-hint">O CPF é usado para identificação e aparece mascarado nas consultas públicas.</small>
                   </label>
                   <label>
                     Cargo / Função
@@ -883,62 +777,60 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                   3. Avaliação e Resultado
                 </b>
                 <div className="form-grid" style={{ marginTop: 0 }}>
-                  {hasGrades && (
-                    <>
+                  <>
                       <label>
-                        Nota AD
+                        Nota AD ({requiresGrades ? 'obrigatória' : 'opcional'})
                         <input
                           className="input"
                           type="number"
                           min="0"
                           max="10"
                           step="0.01"
-                          required
+                          required={requiresGrades}
                           value={formData.notaAd}
                           onChange={e => updateField('notaAd', e.target.value)}
                         />
                       </label>
                       <label>
-                        Nota OD
+                        Nota OD ({requiresGrades ? 'obrigatória' : 'opcional'})
                         <input
                           className="input"
                           type="number"
                           min="0"
                           max="10"
                           step="0.01"
-                          required
+                          required={requiresGrades}
                           value={formData.notaOd}
                           onChange={e => updateField('notaOd', e.target.value)}
                         />
                       </label>
                       <label>
-                        Nota AF
+                        Nota AF ({requiresGrades ? 'obrigatória' : 'opcional'})
                         <input
                           className="input"
                           type="number"
                           min="0"
                           max="10"
                           step="0.01"
-                          required
+                          required={requiresGrades}
                           value={formData.notaAf}
                           onChange={e => updateField('notaAf', e.target.value)}
                         />
                       </label>
                       <label>
-                        Média Final
+                        Média Final ({requiresGrades ? 'obrigatória' : 'opcional'})
                         <input
                           className="input"
                           type="number"
                           min="0"
                           max="10"
                           step="0.01"
-                          required
+                          required={requiresGrades}
                           value={formData.mediaFinal}
                           onChange={e => updateField('mediaFinal', e.target.value)}
                         />
                       </label>
-                    </>
-                  )}
+                  </>
 
                   <label className="wide">
                     Resultado Final
@@ -971,7 +863,7 @@ function EditCertificateModal({ cert, onClose, onSave }) {
             <button type="submit" className="primary" disabled={busy}>
               {busy ? (
                 <>
-                  <LoaderCircle className="spin" size={17} /> Salvando alterações…
+                  <LoaderCircle className="spin" size={17} aria-hidden="true" /> Salvando alterações…
                 </>
               ) : (
                 <>
@@ -1046,7 +938,7 @@ function DeleteCertificateModal({ cert, onClose, onConfirm }) {
           <button type="button" className="danger-btn" onClick={handleDelete} disabled={busy}>
             {busy ? (
               <>
-                <LoaderCircle className="spin" size={17} /> Excluindo…
+                <LoaderCircle className="spin" size={17} aria-hidden="true" /> Excluindo…
               </>
             ) : (
               <>
@@ -1171,7 +1063,7 @@ function Records() {
 
         <div className="filter-actions" style={{ marginTop: '16px' }}>
           <button className="primary" disabled={busy}>
-            {busy ? <LoaderCircle className="spin" size={17} /> : <Search size={17} />} Pesquisar
+            {busy ? <LoaderCircle className="spin" size={17} aria-hidden="true" /> : <Search size={17} aria-hidden="true" />} Pesquisar
           </button>
           <button
             type="button"
@@ -1212,9 +1104,12 @@ function Records() {
         </div>
 
         {!result ? (
-          <Empty text="Os registros encontrados na pesquisa aparecerão aqui. Clique em 'Listar todos' para ver todos os certificados." />
+          <Empty
+            image={emptyCertificatesImage}
+            text="Os registros encontrados na pesquisa aparecerão aqui. Clique em 'Listar todos' para ver todos os certificados."
+          />
         ) : !result.itens.length ? (
-          <Empty text="Nenhum certificado encontrado para os critérios pesquisados." />
+          <Empty image={emptySearchResultsImage} text="Nenhum certificado encontrado para os critérios pesquisados." />
         ) : (
           <div className="table-wrap">
             <table>
@@ -1255,7 +1150,7 @@ function Records() {
                           onClick={() => setEditingCert(r)}
                           title="Editar este certificado"
                         >
-                          <Pencil size={13} /> Editar
+                          <Pencil size={14} aria-hidden="true" /> Editar
                         </button>
                         <button
                           type="button"
@@ -1416,7 +1311,7 @@ function NewAta({ onDone }) {
     }
   }
 
-  const hasGrades = ['CFAT', 'CFATR'].includes(ata.curso);
+  const requiresGrades = ['CFAT', 'CFATR'].includes(ata.curso);
 
   return (
     <>
@@ -1475,6 +1370,9 @@ function NewAta({ onDone }) {
               <PlusCircle size={16} /> Adicionar concluinte ({ata.concluintes.length}/50)
             </button>
           </div>
+          <p className="form-help">
+            Para {ata.curso}, as notas AD, OD, AF e a média final são {requiresGrades ? 'obrigatórias' : 'opcionais'}.
+          </p>
 
           {ata.concluintes.map((p, i) => (
             <div className="person-card" key={i}>
@@ -1488,6 +1386,7 @@ function NewAta({ onDone }) {
               </div>
 
               <div className="form-grid">
+                <div className="form-section-label wide">Identificação do concluinte</div>
                 <label>
                   Nome completo
                   <input
@@ -1495,6 +1394,7 @@ function NewAta({ onDone }) {
                     required
                     minLength={3}
                     maxLength={200}
+                    autoComplete="name"
                     value={p.nome}
                     onChange={e => updatePerson(i, 'nome', e.target.value)}
                     placeholder="Nome completo do agente"
@@ -1508,10 +1408,14 @@ function NewAta({ onDone }) {
                     required
                     inputMode="numeric"
                     maxLength={14}
+                    autoComplete="off"
+                    pattern="[0-9]{3}[.][0-9]{3}[.][0-9]{3}-[0-9]{2}"
+                    title="Informe um CPF no formato 000.000.000-00"
                     placeholder="000.000.000-00"
                     value={p.cpf}
-                    onChange={e => updatePerson(i, 'cpf', e.target.value)}
+                    onChange={e => updatePerson(i, 'cpf', formatCpf(e.target.value))}
                   />
+                  <small className="field-hint">O CPF é usado para identificação e aparece mascarado nas consultas públicas.</small>
                 </label>
 
                 <label>
@@ -1527,6 +1431,7 @@ function NewAta({ onDone }) {
                   />
                 </label>
 
+                <div className="form-section-label wide">Avaliação do curso</div>
                 <label>
                   Frequência (%)
                   <input
@@ -1541,22 +1446,22 @@ function NewAta({ onDone }) {
                   />
                 </label>
 
-                {hasGrades &&
-                  ['notaAd', 'notaOd', 'notaAf', 'mediaFinal'].map(k => (
-                    <label key={k}>
-                      {{ notaAd: 'Nota AD', notaOd: 'Nota OD', notaAf: 'Nota AF', mediaFinal: 'Média final' }[k]}
-                      <input
-                        className="input"
-                        type="number"
-                        min="0"
-                        max="10"
-                        step="0.01"
-                        required
-                        value={p[k]}
-                        onChange={e => updatePerson(i, k, e.target.value)}
-                      />
-                    </label>
-                  ))}
+                {['notaAd', 'notaOd', 'notaAf', 'mediaFinal'].map(k => (
+                  <label key={k}>
+                    {{ notaAd: 'Nota AD', notaOd: 'Nota OD', notaAf: 'Nota AF', mediaFinal: 'Média final' }[k]}
+                    ({requiresGrades ? 'obrigatória' : 'opcional'})
+                    <input
+                      className="input"
+                      type="number"
+                      min="0"
+                      max="10"
+                      step="0.01"
+                      required={requiresGrades}
+                      value={p[k]}
+                      onChange={e => updatePerson(i, k, e.target.value)}
+                    />
+                  </label>
+                ))}
 
                 <label>
                   Resultado final
@@ -1617,7 +1522,7 @@ function NewAta({ onDone }) {
           <button type="submit" className="primary" disabled={busy}>
             {busy ? (
               <>
-                <LoaderCircle className="spin" size={18} /> Processando ata…
+                <LoaderCircle className="spin" size={18} aria-hidden="true" /> Processando ata…
               </>
             ) : (
               <>
@@ -1699,7 +1604,7 @@ function PublicValidation({ onBack, embedded = false, onLoginClick }) {
                 boxShadow: '0 2px 8px rgba(37,99,235,0.25)'
               }}
             >
-              <LockKeyhole size={15} /> Entrar no sistema
+              <LockKeyhole size={15} aria-hidden="true" /> Entrar no sistema
             </button>
           </div>
         </div>
@@ -1744,7 +1649,7 @@ function PublicValidation({ onBack, embedded = false, onLoginClick }) {
           />
 
           <button className="primary full" disabled={busy} style={{ marginTop: '16px', padding: '14px' }}>
-            {busy ? <LoaderCircle className="spin" size={18} /> : <Search size={18} />} Conferir Autenticidade
+            {busy ? <LoaderCircle className="spin" size={18} aria-hidden="true" /> : <Search size={18} aria-hidden="true" />} Conferir Autenticidade
           </button>
         </form>
 
@@ -1779,7 +1684,20 @@ function PublicValidation({ onBack, embedded = false, onLoginClick }) {
               <Detail label="Curso Homologado" value={data.curso} />
               <Detail label="Município" value={data.municipio} />
               <Detail label="Período de Realização" value={`${formatDate(data.periodoInicio)} a ${formatDate(data.periodoFim)}`} />
+              <Detail label="Frequência" value={formatNumber(data.frequencia, '%')} />
               <Detail label="Resultado" value={data.resultado} />
+              {data.notaAd !== null && data.notaAd !== undefined && (
+                <Detail label="Nota AD" value={formatNumber(data.notaAd)} />
+              )}
+              {data.notaOd !== null && data.notaOd !== undefined && (
+                <Detail label="Nota OD" value={formatNumber(data.notaOd)} />
+              )}
+              {data.notaAf !== null && data.notaAf !== undefined && (
+                <Detail label="Nota AF" value={formatNumber(data.notaAf)} />
+              )}
+              {data.mediaFinal !== null && data.mediaFinal !== undefined && (
+                <Detail label="Média Final" value={formatNumber(data.mediaFinal)} />
+              )}
             </div>
           </div>
         )}
@@ -1803,10 +1721,10 @@ function Detail({ label, value, highlight = false }) {
   );
 }
 
-function Empty({ text }) {
+function Empty({ image, text }) {
   return (
     <div className="empty">
-      <Award size={32} color="#94a3b8" />
+      <img src={image} alt="" aria-hidden="true" />
       <span>{text}</span>
     </div>
   );
@@ -1816,6 +1734,30 @@ function formatDate(v) {
   if (!v) return '—';
   const [y, m, d] = v.slice(0, 10).split('-');
   return `${d}/${m}/${y}`;
+}
+
+function formatNumber(value, suffix = '') {
+  if (value === null || value === undefined || value === '') return '—';
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '—';
+  return `${numeric.toFixed(2).replace('.', ',')}${suffix}`;
+}
+
+function formatCpf(value) {
+  const digits = value.replace(/\D/g, '').slice(0, 11);
+  return digits
+    .replace(/^(\d{3})(\d)/, '$1.$2')
+    .replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
+    .replace(/\.(\d{3})(\d)/, '.$1-$2');
+}
+
+function getInitials(name) {
+  return (name || 'SC')
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map(part => part[0]?.toLocaleUpperCase('pt-BR') || '')
+    .join('');
 }
 
 createRoot(document.getElementById('root')).render(<App />);
