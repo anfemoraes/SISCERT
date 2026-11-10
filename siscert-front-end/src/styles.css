@@ -694,10 +694,10 @@ textarea:disabled {
   display: block;
   width: calc(var(--brand-size) + 8px);
   height: calc(var(--brand-size) + 8px);
-  padding: 5px;
-  border: 1px solid var(--color-border);
-  border-radius: 50%;
-  background: #fff;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   object-fit: contain;
 }
 
@@ -1436,6 +1436,77 @@ textarea:disabled {
   margin-top: 16px;
 }
 
+.import-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px 24px;
+  margin-top: 18px;
+  border-color: #d7e2f0;
+  background: linear-gradient(120deg, #fff 45%, #f5f8fd 100%);
+}
+
+.import-copy {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.import-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  place-items: center;
+  border: 1px solid #d5e3f7;
+  border-radius: 10px;
+  background: #edf4ff;
+  color: var(--color-primary);
+}
+
+.import-copy h2 {
+  margin: 0 0 6px;
+  color: var(--color-text);
+  font-size: 16px;
+}
+
+.import-copy p {
+  margin: 0 0 7px;
+  line-height: 1.5;
+}
+
+.import-hint {
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.import-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.import-feedback {
+  grid-column: 1 / -1;
+  margin: 0;
+  white-space: pre-line;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+  border: 0;
+}
+
 .form-grid {
   gap: 18px;
 }
@@ -1457,6 +1528,7 @@ textarea:disabled {
 }
 
 .required-mark {
+  margin-left: 1px;
   color: #dc2626;
   font-weight: 700;
 }
@@ -2138,6 +2210,18 @@ td b {
 }
 
 @media (max-width: 760px) {
+  .import-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .import-actions {
+    justify-content: flex-start;
+  }
+
+  .import-actions > button {
+    flex: 1 1 150px;
+  }
+
   .app-header {
     min-height: 68px;
     gap: 10px;

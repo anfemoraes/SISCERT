@@ -21,7 +21,9 @@ import {
   Pencil,
   Mail,
   AlertTriangle,
-  X
+  X,
+  Upload,
+  FileSpreadsheet
 } from 'lucide-react';
 import { LogoSiscert } from './LogoSiscert';
 import emptyCertificatesImage from './assets/illustrations/empty-certificates.png';
@@ -30,7 +32,259 @@ import './styles.css';
 
 const API = (import.meta.env.VITE_API_URL || 'http://localhost:3000').replace(/\/$/, '');
 const courses = ['CFAT', 'CFATR', 'CAAT', 'CAATR'];
+const spreadsheetColumns = [
+  { key: 'curso', header: 'Curso' },
+  { key: 'municipio', header: 'Município' },
+  { key: 'periodoInicio', header: 'Data de início' },
+  { key: 'periodoFim', header: 'Data de conclusão' },
+  { key: 'nome', header: 'Nome completo' },
+  { key: 'cpf', header: 'CPF' },
+  { key: 'cargoFuncao', header: 'Cargo ou função' },
+  { key: 'frequencia', header: 'Frequência (%)' },
+  { key: 'notaAd', header: 'Nota AD' },
+  { key: 'notaOd', header: 'Nota OD' },
+  { key: 'notaAf', header: 'Nota AF' },
+  { key: 'mediaFinal', header: 'Média final' },
+  { key: 'resultado', header: 'Resultado final' },
+  { key: 'observacoes', header: 'Observações' }
+];
 const DashboardCharts = lazy(() => import('./DashboardCharts'));
+
+function normalizeSpreadsheetHeader(value) {
+  return String(value ?? '')
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}
+
+function parseSpreadsheetCsv(text) {
+  const contents = text.replace(/^\uFEFF/, '');
+  const firstLine = contents.split(/\r?\n/, 1)[0] || '';
+  const delimiter = (firstLine.match(/;/g) || []).length >= (firstLine.match(/,/g) || []).length ? ';' : ',';
+  const rows = [[]];
+  let value = '';
+  let quoted = false;
+
+  for (let i = 0; i < contents.length; i++) {
+    const character = contents[i];
+    if (character === '"') {
+      if (quoted && contents[i + 1] === '"') {
+        value += '"';
+        i++;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (character === delimiter && !quoted) {
+      rows[rows.length - 1].push(value);
+      value = '';
+    } else if ((character === '\n' || character === '\r') && !quoted) {
+      if (character === '\r' && contents[i + 1] === '\n') i++;
+      rows[rows.length - 1].push(value);
+      value = '';
+      rows.push([]);
+    } else {
+      value += character;
+    }
+  }
+
+  if (quoted) throw new Error('O CSV contém aspas sem fechamento.');
+  rows[rows.length - 1].push(value);
+  return rows.filter(row => row.some(cell => String(cell).trim() !== ''));
+}
+
+function spreadsheetCellText(value) {
+  if (value === null || value === undefined) return '';
+  if (value instanceof Date) return value;
+  if (typeof value === 'object') {
+    if ('result' in value) return value.result ?? '';
+    if ('text' in value) return value.text ?? '';
+    if ('richText' in value) return value.richText.map(part => part.text).join('');
+  }
+  return value;
+}
+
+function parseSpreadsheetDate(value) {
+  if (value instanceof Date && Number.isFinite(value.getTime())) return value.toISOString().slice(0, 10);
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    if (value < 0 || value > 2958465) return '';
+    const date = new Date(Date.UTC(1899, 11, 30) + Math.round(value) * 86400000);
+    return Number.isFinite(date.getTime()) ? date.toISOString().slice(0, 10) : '';
+  }
+  const text = String(value ?? '').trim();
+  const iso = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (iso) {
+    const date = new Date(Date.UTC(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3])));
+    if (date.getUTCFullYear() === Number(iso[1]) && date.getUTCMonth() === Number(iso[2]) - 1 && date.getUTCDate() === Number(iso[3])) {
+      return `${iso[1]}-${iso[2].padStart(2, '0')}-${iso[3].padStart(2, '0')}`;
+    }
+    return '';
+  }
+  const local = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (local) {
+    const date = new Date(Date.UTC(Number(local[3]), Number(local[2]) - 1, Number(local[1])));
+    if (date.getUTCFullYear() === Number(local[3]) && date.getUTCMonth() === Number(local[2]) - 1 && date.getUTCDate() === Number(local[1])) {
+      return `${local[3]}-${local[2].padStart(2, '0')}-${local[1].padStart(2, '0')}`;
+    }
+  }
+  return '';
+}
+
+function parseSpreadsheetNumber(value) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  const text = String(value ?? '').trim().replace(/\s/g, '');
+  if (!text) return null;
+  const normalized = text.includes(',')
+    ? text.replace(/\./g, '').replace(',', '.')
+    : text;
+  const number = Number(normalized);
+  return Number.isFinite(number) ? number : null;
+}
+
+function buildAtaFromSpreadsheet(rows) {
+  if (rows.length < 2) throw new Error('A planilha não contém linhas de concluintes.');
+
+  const aliases = {
+    curso: ['curso', 'cursohomologado'],
+    municipio: ['municipio'],
+    periodoInicio: ['datadeinicio', 'periododeinicio', 'periodoinicio'],
+    periodoFim: ['datadeconclusao', 'datadefim', 'periododeconclusao', 'periodofim'],
+    nome: ['nomecompleto', 'nome', 'nomedoconcluinte'],
+    cpf: ['cpf'],
+    cargoFuncao: ['cargooufuncao', 'cargofuncao', 'cargo', 'funcao'],
+    frequencia: ['frequencia', 'frequenciaporcento'],
+    notaAd: ['notaad'],
+    notaOd: ['notaod'],
+    notaAf: ['notaaf'],
+    mediaFinal: ['mediafinal'],
+    resultado: ['resultadofinal', 'resultado'],
+    observacoes: ['observacoes', 'observacao']
+  };
+  const headerIndexes = new Map(rows[0].map((header, index) => [normalizeSpreadsheetHeader(header), index]));
+  const indexes = Object.fromEntries(
+    Object.entries(aliases).map(([key, candidates]) => [
+      key,
+      candidates.map(candidate => headerIndexes.get(candidate)).find(index => index !== undefined)
+    ])
+  );
+  const requiredKeys = ['curso', 'municipio', 'periodoInicio', 'periodoFim', 'nome', 'cpf', 'cargoFuncao', 'frequencia', 'resultado'];
+  const missingHeaders = requiredKeys
+    .filter(key => indexes[key] === undefined)
+    .map(key => spreadsheetColumns.find(column => column.key === key).header);
+  if (missingHeaders.length) {
+    throw new Error(`Colunas obrigatórias ausentes: ${missingHeaders.join(', ')}.`);
+  }
+
+  const dataRows = rows.slice(1).filter(row => row.some(cell => String(cell ?? '').trim() !== ''));
+  if (!dataRows.length) throw new Error('Adicione ao menos um concluinte abaixo do cabeçalho.');
+  if (dataRows.length > 50) throw new Error('O arquivo contém mais de 50 concluintes. O limite por ata é 50.');
+
+  const errors = [];
+  let ataDados = null;
+  const concluintes = dataRows.map((row, index) => {
+    const lineNumber = index + 2;
+    const getValue = key => indexes[key] === undefined ? '' : spreadsheetCellText(row[indexes[key]]);
+    const curso = String(getValue('curso')).trim().toUpperCase();
+    const municipio = String(getValue('municipio')).trim();
+    const periodoInicio = parseSpreadsheetDate(getValue('periodoInicio'));
+    const periodoFim = parseSpreadsheetDate(getValue('periodoFim'));
+    const nome = String(getValue('nome')).trim();
+    const rawCpf = String(getValue('cpf')).trim();
+    const cpfDigits = /^\d{9,10}$/.test(rawCpf) ? rawCpf.padStart(11, '0') : rawCpf.replace(/\D/g, '');
+    const cargoFuncao = String(getValue('cargoFuncao')).trim();
+    const frequencia = parseSpreadsheetNumber(getValue('frequencia'));
+    const resultado = String(getValue('resultado')).trim().toUpperCase();
+    const metadata = { curso, municipio, periodoInicio, periodoFim };
+    const notes = {};
+
+    if (!courses.includes(curso)) notes.invalidCourse = true;
+    if (municipio.length < 2) notes.invalidMunicipality = true;
+    if (!periodoInicio || !periodoFim || periodoFim < periodoInicio) notes.invalidPeriod = true;
+    if (ataDados && Object.keys(metadata).some(key => metadata[key] !== ataDados[key])) notes.mixedAta = true;
+    if (!ataDados) ataDados = metadata;
+    if (nome.length < 3 || nome.length > 200) notes.invalidName = true;
+    if (!/^\d{11}$/.test(cpfDigits)) notes.invalidCpf = true;
+    if (cargoFuncao.length < 2 || cargoFuncao.length > 120) notes.invalidRole = true;
+    if (frequencia === null || frequencia < 0 || frequencia > 100) notes.invalidAttendance = true;
+    if (!['APROVADO', 'REPROVADO'].includes(resultado)) notes.invalidResult = true;
+
+    const grades = {};
+    for (const key of ['notaAd', 'notaOd', 'notaAf', 'mediaFinal']) {
+      const rawGrade = getValue(key);
+      const grade = parseSpreadsheetNumber(rawGrade);
+      if (String(rawGrade ?? '').trim() && (grade === null || grade < 0 || grade > 10)) notes[`invalid_${key}`] = true;
+      if (courses.includes(curso) && ['CFAT', 'CFATR'].includes(curso) && grade === null) notes[`missing_${key}`] = true;
+      grades[key] = grade === null ? '' : String(grade);
+    }
+
+    const rowErrors = Object.entries(notes)
+      .map(([key]) => ({
+        invalidCourse: 'Curso inválido.',
+        invalidMunicipality: 'Município deve ter ao menos 2 caracteres.',
+        invalidPeriod: 'Datas inválidas ou conclusão anterior ao início.',
+        mixedAta: 'Os dados do curso, município e período devem ser iguais em todas as linhas.',
+        invalidName: 'Nome deve ter entre 3 e 200 caracteres.',
+        invalidCpf: 'CPF deve conter 11 dígitos.',
+        invalidRole: 'Cargo ou função deve ter entre 2 e 120 caracteres.',
+        invalidAttendance: 'Frequência deve ser um número entre 0 e 100.',
+        invalidResult: 'Resultado deve ser APROVADO ou REPROVADO.',
+        invalid_notaAd: 'Nota AD deve estar entre 0 e 10.',
+        invalid_notaOd: 'Nota OD deve estar entre 0 e 10.',
+        invalid_notaAf: 'Nota AF deve estar entre 0 e 10.',
+        invalid_mediaFinal: 'Média final deve estar entre 0 e 10.',
+        missing_notaAd: 'Nota AD é obrigatória para CFAT/CFATR.',
+        missing_notaOd: 'Nota OD é obrigatória para CFAT/CFATR.',
+        missing_notaAf: 'Nota AF é obrigatória para CFAT/CFATR.',
+        missing_mediaFinal: 'Média final é obrigatória para CFAT/CFATR.'
+      }[key]));
+    if (rowErrors.length) errors.push(`Linha ${lineNumber}: ${rowErrors.join(' ')}`);
+
+    return {
+      nome,
+      cpf: formatCpf(cpfDigits),
+      cargoFuncao,
+      frequencia: frequencia === null ? '' : String(frequencia),
+      ...grades,
+      resultado,
+      observacoes: String(getValue('observacoes')).trim()
+    };
+  });
+
+  if (errors.length) {
+    throw new Error(errors.slice(0, 10).join('\n') + (errors.length > 10 ? `\nE mais ${errors.length - 10} erro(s).` : ''));
+  }
+
+  return { ...ataDados, concluintes };
+}
+
+async function readSpreadsheetFile(file) {
+  const extension = file.name.split('.').pop()?.toLowerCase();
+  if (extension === 'csv') return buildAtaFromSpreadsheet(parseSpreadsheetCsv(await file.text()));
+  if (extension !== 'xlsx') throw new Error('Formato não suportado. Envie um arquivo .xlsx ou .csv.');
+
+  const { default: readXlsxFile } = await import('read-excel-file/browser');
+  const worksheets = await readXlsxFile(file);
+  const worksheet = worksheets.find(sheet => sheet.sheet === 'Concluintes') || worksheets[0];
+  if (!worksheet?.data) throw new Error('O arquivo Excel não contém uma planilha para importar.');
+  return buildAtaFromSpreadsheet(worksheet.data);
+}
+
+function downloadFile(filename, content, type) {
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(new Blob([content], { type }));
+  link.href = url;
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function downloadExcelTemplate() {
+  const link = document.createElement('a');
+  link.href = `${import.meta.env.BASE_URL}modelo-importacao-siscert.xlsx`;
+  link.download = 'modelo-importacao-siscert.xlsx';
+  link.click();
+}
 
 // Navegação simplificada e focada nos objetivos centrais
 const navItems = [
@@ -315,7 +569,7 @@ function Login({ onSuccess, onPublic }) {
             Entre com suas credenciais do SISCERT.
           </p>
 
-          <label className="field-label login-email-label" htmlFor="login-email"><Mail size={16} aria-hidden="true" /> E-mail institucional <span className="required-mark" aria-hidden="true">*</span></label>
+          <label className="field-label login-email-label" htmlFor="login-email"><Mail size={16} aria-hidden="true" /> <span>E-mail institucional<span className="required-mark" aria-hidden="true">*</span></span></label>
           <input
             id="login-email"
             className="input"
@@ -327,7 +581,7 @@ function Login({ onSuccess, onPublic }) {
             required
           />
 
-          <label className="field-label" htmlFor="login-password">Senha <span className="required-mark" aria-hidden="true">*</span></label>
+          <label className="field-label" htmlFor="login-password"><span>Senha<span className="required-mark" aria-hidden="true">*</span></span></label>
           <div className="password-wrap">
             <input
               id="login-password"
@@ -673,7 +927,7 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                 </b>
                 <div className="form-grid" style={{ marginTop: 0 }}>
                   <label className="wide">
-                    Nome completo <span className="required-mark" aria-hidden="true">*</span>
+                    <span>Nome completo<span className="required-mark" aria-hidden="true">*</span></span>
                     <input
                       className="input"
                       required
@@ -698,7 +952,7 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                     />
                   </label>
                   <label>
-                    Cargo / Função <span className="required-mark" aria-hidden="true">*</span>
+                    <span>Cargo / Função<span className="required-mark" aria-hidden="true">*</span></span>
                     <input
                       className="input"
                       required
@@ -709,7 +963,7 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                     />
                   </label>
                   <label>
-                    Frequência (%) <span className="required-mark" aria-hidden="true">*</span>
+                    <span>Frequência (%)<span className="required-mark" aria-hidden="true">*</span></span>
                     <input
                       className="input"
                       type="number"
@@ -730,7 +984,7 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                 </b>
                 <div className="form-grid" style={{ marginTop: 0 }}>
                   <label>
-                    Curso homologado <span className="required-mark" aria-hidden="true">*</span>
+                    <span>Curso homologado<span className="required-mark" aria-hidden="true">*</span></span>
                     <select className="input" required value={formData.curso} onChange={e => updateField('curso', e.target.value)}>
                       {courses.map(c => (
                         <option key={c} value={c}>{c}</option>
@@ -738,7 +992,7 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                     </select>
                   </label>
                   <label>
-                    Município <span className="required-mark" aria-hidden="true">*</span>
+                    <span>Município<span className="required-mark" aria-hidden="true">*</span></span>
                     <input
                       className="input"
                       required
@@ -749,7 +1003,7 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                     />
                   </label>
                   <label>
-                    Data de Início <span className="required-mark" aria-hidden="true">*</span>
+                    <span>Data de Início<span className="required-mark" aria-hidden="true">*</span></span>
                     <input
                       className="input"
                       type="date"
@@ -759,7 +1013,7 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                     />
                   </label>
                   <label>
-                    Data de Conclusão <span className="required-mark" aria-hidden="true">*</span>
+                    <span>Data de Conclusão<span className="required-mark" aria-hidden="true">*</span></span>
                     <input
                       className="input"
                       type="date"
@@ -778,7 +1032,7 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                 <div className="form-grid" style={{ marginTop: 0 }}>
                   <>
                       <label>
-                        Nota AD{requiresGrades && <> <span className="required-mark" aria-hidden="true">*</span></>}
+                        <span>Nota AD{requiresGrades && <span className="required-mark" aria-hidden="true">*</span>}</span>
                         <input
                           className="input"
                           type="number"
@@ -791,7 +1045,7 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                         />
                       </label>
                       <label>
-                        Nota OD{requiresGrades && <> <span className="required-mark" aria-hidden="true">*</span></>}
+                        <span>Nota OD{requiresGrades && <span className="required-mark" aria-hidden="true">*</span>}</span>
                         <input
                           className="input"
                           type="number"
@@ -804,7 +1058,7 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                         />
                       </label>
                       <label>
-                        Nota AF{requiresGrades && <> <span className="required-mark" aria-hidden="true">*</span></>}
+                        <span>Nota AF{requiresGrades && <span className="required-mark" aria-hidden="true">*</span>}</span>
                         <input
                           className="input"
                           type="number"
@@ -817,7 +1071,7 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                         />
                       </label>
                       <label>
-                        Média Final{requiresGrades && <> <span className="required-mark" aria-hidden="true">*</span></>}
+                        <span>Média Final{requiresGrades && <span className="required-mark" aria-hidden="true">*</span>}</span>
                         <input
                           className="input"
                           type="number"
@@ -832,7 +1086,7 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                   </>
 
                   <label className="wide">
-                    Resultado Final <span className="required-mark" aria-hidden="true">*</span>
+                    <span>Resultado Final<span className="required-mark" aria-hidden="true">*</span></span>
                     <select className="input" required value={formData.resultado} onChange={e => updateField('resultado', e.target.value)}>
                       <option value="APROVADO">APROVADO (Possui / gera código oficial)</option>
                       <option value="REPROVADO">REPROVADO (Sem emissão de código)</option>
@@ -980,7 +1234,7 @@ function Records() {
       };
 
       const primeiraPagina = await carregarPagina(1);
-      const itens = new Map(primeiraPagina.itens.map(item => [item.id, item]));
+      const itens = [...primeiraPagina.itens];
       const totalPaginas = Math.ceil(primeiraPagina.total / tamanho);
       for (let inicio = 2; inicio <= totalPaginas; inicio += 5) {
         const paginas = Array.from(
@@ -988,17 +1242,17 @@ function Records() {
           (_, indice) => carregarPagina(inicio + indice)
         );
         const respostas = await Promise.all(paginas);
-        respostas.forEach(resposta => resposta.itens.forEach(item => itens.set(item.id, item)));
+        respostas.forEach(resposta => itens.push(...resposta.itens));
       }
 
-      return { total: primeiraPagina.total, itens: Array.from(itens.values()) };
+      return { total: primeiraPagina.total, itens };
     };
 
     const resultados = await Promise.all(courses.map(listarCurso));
-    const itens = new Map(resultados.flatMap(resultado => resultado.itens).map(item => [item.id, item]));
+    const itens = resultados.flatMap(resultado => resultado.itens);
     return {
       total: resultados.reduce((total, resultado) => total + resultado.total, 0),
-      itens: Array.from(itens.values())
+      itens
     };
   }
 
@@ -1289,6 +1543,10 @@ function NewAta({ onDone }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(null);
+  const [importError, setImportError] = useState('');
+  const [importMessage, setImportMessage] = useState('');
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef(null);
 
   function updateAta(k, v) {
     setAta(x => ({ ...x, [k]: v }));
@@ -1312,6 +1570,51 @@ function NewAta({ onDone }) {
       ...x,
       concluintes: x.concluintes.filter((_, n) => n !== i)
     }));
+  }
+
+  async function importSpreadsheet(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setImportError('');
+    setImportMessage('');
+    const hasDraft = Boolean(
+      ata.municipio ||
+      ata.periodoInicio ||
+      ata.periodoFim ||
+      ata.concluintes.length > 1 ||
+      ata.concluintes.some(person =>
+        person.nome || person.cpf || person.cargoFuncao || person.notaAd ||
+        person.notaOd || person.notaAf || person.mediaFinal || person.observacoes
+      )
+    );
+
+    if (hasDraft && !window.confirm('A importação substituirá os dados já preenchidos nesta ata. Deseja continuar?')) {
+      event.target.value = '';
+      return;
+    }
+
+    setImporting(true);
+    try {
+      const importedAta = await readSpreadsheetFile(file);
+      setAta(importedAta);
+      setError('');
+      setSuccess(null);
+      setImportMessage(`${importedAta.concluintes.length} concluinte(s) importado(s). Revise os dados e clique em “Registrar Ata”.`);
+    } catch (err) {
+      setImportError(err.message || 'Não foi possível ler a planilha.');
+    } finally {
+      setImporting(false);
+      event.target.value = '';
+    }
+  }
+
+  function downloadCsvTemplate() {
+    downloadFile(
+      'modelo-importacao-siscert.csv',
+      `\uFEFF${spreadsheetColumns.map(column => column.header).join(';')}\r\n`,
+      'text/csv;charset=utf-8'
+    );
   }
 
   async function submit(e) {
@@ -1363,12 +1666,50 @@ function NewAta({ onDone }) {
         </div>
       </div>
 
+      <section className="panel import-panel">
+        <div className="import-copy">
+          <div className="import-icon"><FileSpreadsheet size={22} aria-hidden="true" /></div>
+          <div>
+            <h2>Importar concluintes da planilha</h2>
+            <p className="muted">
+              Importe um arquivo Excel (.xlsx) ou CSV. Cada linha deve conter um concluinte; os dados do curso e período devem se repetir em todas as linhas.
+            </p>
+            <small className="import-hint">
+              A planilha será carregada para revisão. Limite de 50 concluintes por ata. CPF deve ter 11 dígitos; datas aceitas: DD/MM/AAAA ou AAAA-MM-DD.
+            </small>
+          </div>
+        </div>
+        <div className="import-actions">
+          <button type="button" className="secondary" onClick={downloadExcelTemplate}>
+            <Download size={16} aria-hidden="true" /> Modelo Excel
+          </button>
+          <button type="button" className="secondary" onClick={downloadCsvTemplate}>
+            <Download size={16} aria-hidden="true" /> Modelo CSV
+          </button>
+          <input
+            ref={fileInputRef}
+            className="visually-hidden"
+            type="file"
+            accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+            onChange={importSpreadsheet}
+            aria-label="Selecionar planilha Excel ou CSV"
+          />
+          <button type="button" className="primary" disabled={importing || busy} onClick={() => fileInputRef.current?.click()}>
+            {importing
+              ? <><LoaderCircle className="spin" size={16} aria-hidden="true" /> Lendo planilha...</>
+              : <><Upload size={16} aria-hidden="true" /> Importar Excel/CSV</>}
+          </button>
+        </div>
+        {importError && <div className="alert error import-feedback" role="alert">{importError}</div>}
+        {importMessage && <div className="alert success import-feedback" role="status">{importMessage}</div>}
+      </section>
+
       <form onSubmit={submit}>
         <section className="panel form-panel">
           <h2>1. Dados do Curso e Município</h2>
           <div className="form-grid">
             <label>
-              Curso homologado <span className="required-mark" aria-hidden="true">*</span>
+              <span>Curso homologado<span className="required-mark" aria-hidden="true">*</span></span>
               <select className="input" required value={ata.curso} onChange={e => updateAta('curso', e.target.value)}>
                 {courses.map(c => (
                   <option key={c}>{c}</option>
@@ -1376,7 +1717,7 @@ function NewAta({ onDone }) {
               </select>
             </label>
             <label>
-              Município <span className="required-mark" aria-hidden="true">*</span>
+              <span>Município<span className="required-mark" aria-hidden="true">*</span></span>
               <input
                 className="input"
                 required
@@ -1388,11 +1729,11 @@ function NewAta({ onDone }) {
               />
             </label>
             <label>
-              Data de Início <span className="required-mark" aria-hidden="true">*</span>
+              <span>Data de Início<span className="required-mark" aria-hidden="true">*</span></span>
               <input className="input" type="date" required value={ata.periodoInicio} onChange={e => updateAta('periodoInicio', e.target.value)} />
             </label>
             <label>
-              Data de Conclusão <span className="required-mark" aria-hidden="true">*</span>
+              <span>Data de Conclusão<span className="required-mark" aria-hidden="true">*</span></span>
               <input className="input" type="date" required value={ata.periodoFim} onChange={e => updateAta('periodoFim', e.target.value)} />
             </label>
           </div>
@@ -1422,7 +1763,7 @@ function NewAta({ onDone }) {
               <div className="form-grid">
                 <div className="form-section-label wide">Identificação do concluinte</div>
                 <label>
-                  Nome completo <span className="required-mark" aria-hidden="true">*</span>
+                  <span>Nome completo<span className="required-mark" aria-hidden="true">*</span></span>
                   <input
                     className="input"
                     required
@@ -1436,7 +1777,7 @@ function NewAta({ onDone }) {
                 </label>
 
                 <label>
-                  CPF <span className="required-mark" aria-hidden="true">*</span>
+                  <span>CPF<span className="required-mark" aria-hidden="true">*</span></span>
                   <input
                     className="input"
                     required
@@ -1452,7 +1793,7 @@ function NewAta({ onDone }) {
                 </label>
 
                 <label>
-                  Cargo ou Função <span className="required-mark" aria-hidden="true">*</span>
+                  <span>Cargo ou Função<span className="required-mark" aria-hidden="true">*</span></span>
                   <input
                     className="input"
                     required
@@ -1466,7 +1807,7 @@ function NewAta({ onDone }) {
 
                 <div className="form-section-label wide">Avaliação do curso</div>
                 <label>
-                  Frequência (%) <span className="required-mark" aria-hidden="true">*</span>
+                  <span>Frequência (%)<span className="required-mark" aria-hidden="true">*</span></span>
                   <input
                     className="input"
                     type="number"
@@ -1481,8 +1822,7 @@ function NewAta({ onDone }) {
 
                 {['notaAd', 'notaOd', 'notaAf', 'mediaFinal'].map(k => (
                   <label key={k}>
-                    {{ notaAd: 'Nota AD', notaOd: 'Nota OD', notaAf: 'Nota AF', mediaFinal: 'Média final' }[k]}
-                    {requiresGrades && <> <span className="required-mark" aria-hidden="true">*</span></>}
+                    <span>{{ notaAd: 'Nota AD', notaOd: 'Nota OD', notaAf: 'Nota AF', mediaFinal: 'Média final' }[k]}{requiresGrades && <span className="required-mark" aria-hidden="true">*</span>}</span>
                     <input
                       className="input"
                       type="number"
@@ -1497,9 +1837,9 @@ function NewAta({ onDone }) {
                 ))}
 
                 <label>
-                  Resultado final <span className="required-mark" aria-hidden="true">*</span>
+                  <span>Resultado final<span className="required-mark" aria-hidden="true">*</span></span>
                   <select className="input" required value={p.resultado} onChange={e => updatePerson(i, 'resultado', e.target.value)}>
-                    <option value="APROVADO">APROVADO (Recebe código)</option>
+                    <option value="APROVADO">APROVADO</option>
                     <option value="REPROVADO">REPROVADO</option>
                   </select>
                 </label>
@@ -1680,7 +2020,7 @@ function PublicValidation({ onBack, embedded = false, onLoginClick }) {
 
         <form onSubmit={verify} className="verify-form">
           <label className="field-label" style={{ fontWeight: 600, color: '#334155' }}>
-            Código do certificado <span className="required-mark" aria-hidden="true">*</span>
+            <span>Código do certificado<span className="required-mark" aria-hidden="true">*</span></span>
           </label>
           <input
             className="input code-input"
