@@ -961,6 +961,7 @@ function Records() {
   const [busy, setBusy] = useState(false);
   const [pagina, setPagina] = useState(1);
   const [showingAll, setShowingAll] = useState(false);
+  const [listingAll, setListingAll] = useState(false);
   const [editingCert, setEditingCert] = useState(null);
   const [deletingCert, setDeletingCert] = useState(null);
   const [toast, setToast] = useState('');
@@ -969,6 +970,34 @@ function Records() {
     setToast(msg);
     setTimeout(() => setToast(''), 4000);
   };
+
+  async function fetchAllRecords() {
+    const tamanho = 100;
+    const carregarPagina = (numero) => {
+      const params = new URLSearchParams({
+        todos: '1',
+        pagina: String(numero),
+        tamanho: String(tamanho)
+      });
+      return api(`/certificacoes?${params}`);
+    };
+
+    const primeiraPagina = await carregarPagina(1);
+    if (primeiraPagina.itens.length >= primeiraPagina.total) return primeiraPagina;
+
+    const itens = new Map(primeiraPagina.itens.map(item => [item.id, item]));
+    const totalPaginas = Math.ceil(primeiraPagina.total / tamanho);
+    for (let inicio = 2; inicio <= totalPaginas; inicio += 5) {
+      const paginas = Array.from(
+        { length: Math.min(5, totalPaginas - inicio + 1) },
+        (_, indice) => carregarPagina(inicio + indice)
+      );
+      const respostas = await Promise.all(paginas);
+      respostas.forEach(resposta => resposta.itens.forEach(item => itens.set(item.id, item)));
+    }
+
+    return { ...primeiraPagina, itens: Array.from(itens.values()) };
+  }
 
   async function search(e, pageNumber = 1, showAll = false) {
     if (e) e.preventDefault();
@@ -991,15 +1020,17 @@ function Records() {
     }
 
     setBusy(true);
+    setListingAll(showAll);
     setError('');
     try {
-      setResult(await api(`/certificacoes?${params}`));
+      setResult(showAll ? await fetchAllRecords() : await api(`/certificacoes?${params}`));
       setPagina(pageNumber);
       setShowingAll(showAll);
     } catch (err) {
       setError(err.message);
     } finally {
       setBusy(false);
+      setListingAll(false);
     }
   }
 
@@ -1074,7 +1105,7 @@ function Records() {
             disabled={busy}
             onClick={() => search(undefined, 1, true)}
           >
-            Listar todos
+            {listingAll ? <><LoaderCircle className="spin" size={17} aria-hidden="true" /> Carregando todos...</> : 'Listar todos'}
           </button>
           <button
             type="button"

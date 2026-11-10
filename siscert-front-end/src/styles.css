@@ -1758,18 +1758,18 @@ td b {
 .verification-toast {
   position: fixed;
   z-index: 3000;
-  top: 20px;
+  bottom: 20px;
   right: 20px;
   display: flex;
   width: min(520px, calc(100vw - 32px));
   align-items: flex-start;
   gap: 12px;
   padding: 16px 14px;
-  border: 1px solid #86efac;
+  border: 1px solid #166534;
   border-radius: 12px;
-  background: #f0fdf4;
+  background: #14532d;
   box-shadow: 0 14px 36px rgba(15, 23, 42, 0.18);
-  color: #16a34a;
+  color: #bbf7d0;
   animation: verification-toast-in 180ms ease-out;
 }
 
@@ -1780,12 +1780,12 @@ td b {
 }
 
 .verification-toast-copy b {
-  color: #15803d;
+  color: #ffffff;
   font-size: 14px;
 }
 
 .verification-toast-copy span {
-  color: #475569;
+  color: #dcfce7;
   font-size: 12px;
   line-height: 1.5;
 }
@@ -1800,18 +1800,18 @@ td b {
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: #166534;
+  color: #dcfce7;
   cursor: pointer;
 }
 
 .verification-toast-close:hover {
-  background: #dcfce7;
+  background: rgba(255, 255, 255, 0.14);
 }
 
 @keyframes verification-toast-in {
   from {
     opacity: 0;
-    transform: translateY(-8px);
+    transform: translateY(24px);
   }
   to {
     opacity: 1;
@@ -1821,7 +1821,7 @@ td b {
 
 @media (max-width: 480px) {
   .verification-toast {
-    top: 12px;
+    bottom: 12px;
     right: 12px;
   }
 
