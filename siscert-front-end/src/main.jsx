@@ -973,30 +973,33 @@ function Records() {
 
   async function fetchAllRecords() {
     const tamanho = 100;
-    const carregarPagina = (numero) => {
-      const params = new URLSearchParams({
-        todos: '1',
-        pagina: String(numero),
-        tamanho: String(tamanho)
-      });
-      return api(`/certificacoes?${params}`);
+    const listarCurso = async (curso) => {
+      const carregarPagina = (pagina) => {
+        const params = new URLSearchParams({ curso, pagina: String(pagina), tamanho: String(tamanho) });
+        return api(`/certificacoes?${params}`);
+      };
+
+      const primeiraPagina = await carregarPagina(1);
+      const itens = new Map(primeiraPagina.itens.map(item => [item.id, item]));
+      const totalPaginas = Math.ceil(primeiraPagina.total / tamanho);
+      for (let inicio = 2; inicio <= totalPaginas; inicio += 5) {
+        const paginas = Array.from(
+          { length: Math.min(5, totalPaginas - inicio + 1) },
+          (_, indice) => carregarPagina(inicio + indice)
+        );
+        const respostas = await Promise.all(paginas);
+        respostas.forEach(resposta => resposta.itens.forEach(item => itens.set(item.id, item)));
+      }
+
+      return { total: primeiraPagina.total, itens: Array.from(itens.values()) };
     };
 
-    const primeiraPagina = await carregarPagina(1);
-    if (primeiraPagina.itens.length >= primeiraPagina.total) return primeiraPagina;
-
-    const itens = new Map(primeiraPagina.itens.map(item => [item.id, item]));
-    const totalPaginas = Math.ceil(primeiraPagina.total / tamanho);
-    for (let inicio = 2; inicio <= totalPaginas; inicio += 5) {
-      const paginas = Array.from(
-        { length: Math.min(5, totalPaginas - inicio + 1) },
-        (_, indice) => carregarPagina(inicio + indice)
-      );
-      const respostas = await Promise.all(paginas);
-      respostas.forEach(resposta => resposta.itens.forEach(item => itens.set(item.id, item)));
-    }
-
-    return { ...primeiraPagina, itens: Array.from(itens.values()) };
+    const resultados = await Promise.all(courses.map(listarCurso));
+    const itens = new Map(resultados.flatMap(resultado => resultado.itens).map(item => [item.id, item]));
+    return {
+      total: resultados.reduce((total, resultado) => total + resultado.total, 0),
+      itens: Array.from(itens.values())
+    };
   }
 
   async function search(e, pageNumber = 1, showAll = false) {
