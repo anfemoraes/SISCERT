@@ -47,25 +47,26 @@ export interface FiltrosBusca {
 
 export async function buscar(db: Db, f: FiltrosBusca) {
   const cond: SQL[] = [];
-  if (f.nome) {
+  if (!f.todos && f.nome) {
     cond.push(sql`${certificacoes.nomeBusca} LIKE ${padraoContem(f.nome)} ESCAPE '\\'`);
   }
-  if (f.municipio) {
+  if (!f.todos && f.municipio) {
     cond.push(sql`${certificacoes.municipioBusca} LIKE ${padraoContem(f.municipio)} ESCAPE '\\'`);
   }
-  if (f.cpf) cond.push(eq(certificacoes.cpf, f.cpf));
-  if (f.curso) cond.push(eq(certificacoes.curso, f.curso));
-  if (f.codigo) cond.push(eq(certificacoes.codigo, f.codigo.toUpperCase()));
+  if (!f.todos && f.cpf) cond.push(eq(certificacoes.cpf, f.cpf));
+  if (!f.todos && f.curso) cond.push(eq(certificacoes.curso, f.curso));
+  if (!f.todos && f.codigo) cond.push(eq(certificacoes.codigo, f.codigo.toUpperCase()));
   const where = cond.length > 0 ? and(...cond) : undefined;
 
   const [contagem] = await db.select({ total: count() }).from(certificacoes).where(where);
-  const itens = await db
+  const consulta = db
     .select()
     .from(certificacoes)
     .where(where)
-    .orderBy(asc(certificacoes.nomeBusca), asc(certificacoes.id))
-    .limit(f.tamanho)
-    .offset((f.pagina - 1) * f.tamanho);
+    .orderBy(asc(certificacoes.nomeBusca), asc(certificacoes.id));
+  const itens = f.todos
+    ? await consulta
+    : await consulta.limit(f.tamanho).offset((f.pagina - 1) * f.tamanho);
 
   return { total: contagem?.total ?? 0, itens };
 }

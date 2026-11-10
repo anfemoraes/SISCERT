@@ -315,7 +315,7 @@ function Login({ onSuccess, onPublic }) {
             Entre com suas credenciais do SISCERT.
           </p>
 
-          <label className="field-label login-email-label" htmlFor="login-email"><Mail size={16} aria-hidden="true" /> E-mail institucional</label>
+          <label className="field-label login-email-label" htmlFor="login-email"><Mail size={16} aria-hidden="true" /> E-mail institucional <span className="required-mark" aria-hidden="true">*</span></label>
           <input
             id="login-email"
             className="input"
@@ -327,7 +327,7 @@ function Login({ onSuccess, onPublic }) {
             required
           />
 
-          <label className="field-label" htmlFor="login-password">Senha</label>
+          <label className="field-label" htmlFor="login-password">Senha <span className="required-mark" aria-hidden="true">*</span></label>
           <div className="password-wrap">
             <input
               id="login-password"
@@ -673,7 +673,7 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                 </b>
                 <div className="form-grid" style={{ marginTop: 0 }}>
                   <label className="wide">
-                    Nome completo
+                    Nome completo <span className="required-mark" aria-hidden="true">*</span>
                     <input
                       className="input"
                       required
@@ -696,10 +696,9 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                       pattern={formData.cpf.includes('*') ? undefined : '[0-9]{3}[.][0-9]{3}[.][0-9]{3}-[0-9]{2}'}
                       title="Informe um CPF no formato 000.000.000-00"
                     />
-                    <small className="field-hint">O CPF é usado para identificação e aparece mascarado nas consultas públicas.</small>
                   </label>
                   <label>
-                    Cargo / Função
+                    Cargo / Função <span className="required-mark" aria-hidden="true">*</span>
                     <input
                       className="input"
                       required
@@ -710,7 +709,7 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                     />
                   </label>
                   <label>
-                    Frequência (%)
+                    Frequência (%) <span className="required-mark" aria-hidden="true">*</span>
                     <input
                       className="input"
                       type="number"
@@ -731,15 +730,15 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                 </b>
                 <div className="form-grid" style={{ marginTop: 0 }}>
                   <label>
-                    Curso homologado
-                    <select className="input" value={formData.curso} onChange={e => updateField('curso', e.target.value)}>
+                    Curso homologado <span className="required-mark" aria-hidden="true">*</span>
+                    <select className="input" required value={formData.curso} onChange={e => updateField('curso', e.target.value)}>
                       {courses.map(c => (
                         <option key={c} value={c}>{c}</option>
                       ))}
                     </select>
                   </label>
                   <label>
-                    Município
+                    Município <span className="required-mark" aria-hidden="true">*</span>
                     <input
                       className="input"
                       required
@@ -750,7 +749,7 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                     />
                   </label>
                   <label>
-                    Data de Início
+                    Data de Início <span className="required-mark" aria-hidden="true">*</span>
                     <input
                       className="input"
                       type="date"
@@ -760,7 +759,7 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                     />
                   </label>
                   <label>
-                    Data de Conclusão
+                    Data de Conclusão <span className="required-mark" aria-hidden="true">*</span>
                     <input
                       className="input"
                       type="date"
@@ -779,7 +778,7 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                 <div className="form-grid" style={{ marginTop: 0 }}>
                   <>
                       <label>
-                        Nota AD ({requiresGrades ? 'obrigatória' : 'opcional'})
+                        Nota AD{requiresGrades && <> <span className="required-mark" aria-hidden="true">*</span></>}
                         <input
                           className="input"
                           type="number"
@@ -792,7 +791,7 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                         />
                       </label>
                       <label>
-                        Nota OD ({requiresGrades ? 'obrigatória' : 'opcional'})
+                        Nota OD{requiresGrades && <> <span className="required-mark" aria-hidden="true">*</span></>}
                         <input
                           className="input"
                           type="number"
@@ -805,7 +804,7 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                         />
                       </label>
                       <label>
-                        Nota AF ({requiresGrades ? 'obrigatória' : 'opcional'})
+                        Nota AF{requiresGrades && <> <span className="required-mark" aria-hidden="true">*</span></>}
                         <input
                           className="input"
                           type="number"
@@ -818,7 +817,7 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                         />
                       </label>
                       <label>
-                        Média Final ({requiresGrades ? 'obrigatória' : 'opcional'})
+                        Média Final{requiresGrades && <> <span className="required-mark" aria-hidden="true">*</span></>}
                         <input
                           className="input"
                           type="number"
@@ -833,8 +832,8 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                   </>
 
                   <label className="wide">
-                    Resultado Final
-                    <select className="input" value={formData.resultado} onChange={e => updateField('resultado', e.target.value)}>
+                    Resultado Final <span className="required-mark" aria-hidden="true">*</span>
+                    <select className="input" required value={formData.resultado} onChange={e => updateField('resultado', e.target.value)}>
                       <option value="APROVADO">APROVADO (Possui / gera código oficial)</option>
                       <option value="REPROVADO">REPROVADO (Sem emissão de código)</option>
                     </select>
@@ -961,6 +960,7 @@ function Records() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [pagina, setPagina] = useState(1);
+  const [showingAll, setShowingAll] = useState(false);
   const [editingCert, setEditingCert] = useState(null);
   const [deletingCert, setDeletingCert] = useState(null);
   const [toast, setToast] = useState('');
@@ -980,8 +980,10 @@ function Records() {
         if (v.trim()) params.set(k, v.trim());
       });
     }
-    params.set('pagina', String(pageNumber));
-    params.set('tamanho', '20');
+    if (!showAll) {
+      params.set('pagina', String(pageNumber));
+      params.set('tamanho', '20');
+    }
 
     if (!showAll && !params.has('nome') && !params.has('cpf') && !params.has('municipio') && !params.has('curso') && !params.has('codigo')) {
       setError('Informe ao menos um critério para pesquisar (Nome, CPF, Município, Curso ou Código) ou clique em "Listar todos".');
@@ -993,6 +995,7 @@ function Records() {
     try {
       setResult(await api(`/certificacoes?${params}`));
       setPagina(pageNumber);
+      setShowingAll(showAll);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -1081,6 +1084,7 @@ function Records() {
               setResult(null);
               setError('');
               setPagina(1);
+              setShowingAll(false);
             }}
           >
             Limpar filtros
@@ -1169,7 +1173,7 @@ function Records() {
           </div>
         )}
 
-        {result && result.total > 20 && (
+        {result && !showingAll && result.total > 20 && (
           <div className="pagination">
             <span>
               Página {pagina} de {Math.ceil(result.total / 20)} · Total de {result.total} registros
@@ -1330,15 +1334,15 @@ function NewAta({ onDone }) {
           <h2>1. Dados do Curso e Município</h2>
           <div className="form-grid">
             <label>
-              Curso homologado
-              <select className="input" value={ata.curso} onChange={e => updateAta('curso', e.target.value)}>
+              Curso homologado <span className="required-mark" aria-hidden="true">*</span>
+              <select className="input" required value={ata.curso} onChange={e => updateAta('curso', e.target.value)}>
                 {courses.map(c => (
                   <option key={c}>{c}</option>
                 ))}
               </select>
             </label>
             <label>
-              Município
+              Município <span className="required-mark" aria-hidden="true">*</span>
               <input
                 className="input"
                 required
@@ -1350,11 +1354,11 @@ function NewAta({ onDone }) {
               />
             </label>
             <label>
-              Data de Início
+              Data de Início <span className="required-mark" aria-hidden="true">*</span>
               <input className="input" type="date" required value={ata.periodoInicio} onChange={e => updateAta('periodoInicio', e.target.value)} />
             </label>
             <label>
-              Data de Conclusão
+              Data de Conclusão <span className="required-mark" aria-hidden="true">*</span>
               <input className="input" type="date" required value={ata.periodoFim} onChange={e => updateAta('periodoFim', e.target.value)} />
             </label>
           </div>
@@ -1370,10 +1374,6 @@ function NewAta({ onDone }) {
               <PlusCircle size={16} /> Adicionar concluinte ({ata.concluintes.length}/50)
             </button>
           </div>
-          <p className="form-help">
-            Para {ata.curso}, as notas AD, OD, AF e a média final são {requiresGrades ? 'obrigatórias' : 'opcionais'}.
-          </p>
-
           {ata.concluintes.map((p, i) => (
             <div className="person-card" key={i}>
               <div className="person-title">
@@ -1388,7 +1388,7 @@ function NewAta({ onDone }) {
               <div className="form-grid">
                 <div className="form-section-label wide">Identificação do concluinte</div>
                 <label>
-                  Nome completo
+                  Nome completo <span className="required-mark" aria-hidden="true">*</span>
                   <input
                     className="input"
                     required
@@ -1402,7 +1402,7 @@ function NewAta({ onDone }) {
                 </label>
 
                 <label>
-                  CPF
+                  CPF <span className="required-mark" aria-hidden="true">*</span>
                   <input
                     className="input"
                     required
@@ -1415,11 +1415,10 @@ function NewAta({ onDone }) {
                     value={p.cpf}
                     onChange={e => updatePerson(i, 'cpf', formatCpf(e.target.value))}
                   />
-                  <small className="field-hint">O CPF é usado para identificação e aparece mascarado nas consultas públicas.</small>
                 </label>
 
                 <label>
-                  Cargo ou Função
+                  Cargo ou Função <span className="required-mark" aria-hidden="true">*</span>
                   <input
                     className="input"
                     required
@@ -1433,7 +1432,7 @@ function NewAta({ onDone }) {
 
                 <div className="form-section-label wide">Avaliação do curso</div>
                 <label>
-                  Frequência (%)
+                  Frequência (%) <span className="required-mark" aria-hidden="true">*</span>
                   <input
                     className="input"
                     type="number"
@@ -1449,7 +1448,7 @@ function NewAta({ onDone }) {
                 {['notaAd', 'notaOd', 'notaAf', 'mediaFinal'].map(k => (
                   <label key={k}>
                     {{ notaAd: 'Nota AD', notaOd: 'Nota OD', notaAf: 'Nota AF', mediaFinal: 'Média final' }[k]}
-                    ({requiresGrades ? 'obrigatória' : 'opcional'})
+                    {requiresGrades && <> <span className="required-mark" aria-hidden="true">*</span></>}
                     <input
                       className="input"
                       type="number"
@@ -1464,8 +1463,8 @@ function NewAta({ onDone }) {
                 ))}
 
                 <label>
-                  Resultado final
-                  <select className="input" value={p.resultado} onChange={e => updatePerson(i, 'resultado', e.target.value)}>
+                  Resultado final <span className="required-mark" aria-hidden="true">*</span>
+                  <select className="input" required value={p.resultado} onChange={e => updatePerson(i, 'resultado', e.target.value)}>
                     <option value="APROVADO">APROVADO (Recebe código)</option>
                     <option value="REPROVADO">REPROVADO</option>
                   </select>
@@ -1565,14 +1564,24 @@ function PublicValidation({ onBack, embedded = false, onLoginClick }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [showSuccessNotice, setShowSuccessNotice] = useState(false);
+
+  useEffect(() => {
+    if (!data || !showSuccessNotice) return undefined;
+    const timeout = setTimeout(() => setShowSuccessNotice(false), 5000);
+    return () => clearTimeout(timeout);
+  }, [data, showSuccessNotice]);
 
   async function verify(e) {
     e.preventDefault();
     setBusy(true);
     setData(null);
+    setShowSuccessNotice(false);
     setError('');
     try {
-      setData(await api(`/certificacoes/${encodeURIComponent(codigo.trim().toUpperCase())}`));
+      const certificado = await api(`/certificacoes/${encodeURIComponent(codigo.trim().toUpperCase())}`);
+      setData(certificado);
+      setShowSuccessNotice(true);
     } catch (err) {
       setError(err.message || 'Certificado não localizado para este código.');
     } finally {
@@ -1637,7 +1646,7 @@ function PublicValidation({ onBack, embedded = false, onLoginClick }) {
 
         <form onSubmit={verify} className="verify-form">
           <label className="field-label" style={{ fontWeight: 600, color: '#334155' }}>
-            Código do certificado
+            Código do certificado <span className="required-mark" aria-hidden="true">*</span>
           </label>
           <input
             className="input code-input"
@@ -1657,51 +1666,64 @@ function PublicValidation({ onBack, embedded = false, onLoginClick }) {
 
         {data && (
           <div className="verification-result" style={{ marginTop: '22px' }}>
-            <div
-              className="verified"
-              style={{
-                background: '#f0fdf4',
-                border: '1px solid #bbf7d0',
-                borderRadius: '12px',
-                padding: '16px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px'
-              }}
-            >
-              <CheckCircle2 size={26} color="#16a34a" />
-              <div>
-                <b style={{ color: '#15803d', fontSize: '15px' }}>Certificado Autêntico e Válido</b>
-                <span style={{ display: 'block', color: '#4b5563', fontSize: '12px', marginTop: '2px' }}>
-                  Registro localizado na base oficial de certificações do CETRAN/PA.
-                </span>
+            <section className="verification-section">
+              <h3>Identificação</h3>
+              <div className="detail-grid">
+                <Detail label="Código Oficial" value={data.codigo} highlight />
+                <Detail label="Nome do Concluinte" value={data.nome} />
               </div>
-            </div>
+            </section>
 
-            <div className="detail-grid" style={{ marginTop: '16px' }}>
-              <Detail label="Código Oficial" value={data.codigo} highlight />
-              <Detail label="Nome do Concluinte" value={data.nome} />
-              <Detail label="Curso Homologado" value={data.curso} />
-              <Detail label="Município" value={data.municipio} />
-              <Detail label="Período de Realização" value={`${formatDate(data.periodoInicio)} a ${formatDate(data.periodoFim)}`} />
-              <Detail label="Frequência" value={formatNumber(data.frequencia, '%')} />
-              <Detail label="Resultado" value={data.resultado} />
-              {data.notaAd !== null && data.notaAd !== undefined && (
-                <Detail label="Nota AD" value={formatNumber(data.notaAd)} />
-              )}
-              {data.notaOd !== null && data.notaOd !== undefined && (
-                <Detail label="Nota OD" value={formatNumber(data.notaOd)} />
-              )}
-              {data.notaAf !== null && data.notaAf !== undefined && (
-                <Detail label="Nota AF" value={formatNumber(data.notaAf)} />
-              )}
-              {data.mediaFinal !== null && data.mediaFinal !== undefined && (
-                <Detail label="Média Final" value={formatNumber(data.mediaFinal)} />
-              )}
-            </div>
+            <section className="verification-section">
+              <h3>Curso e realização</h3>
+              <div className="detail-grid">
+                <Detail label="Curso Homologado" value={data.curso} />
+                <Detail label="Município" value={data.municipio} />
+                <Detail label="Período de Realização" value={`${formatDate(data.periodoInicio)} a ${formatDate(data.periodoFim)}`} />
+              </div>
+            </section>
+
+            <section className="verification-section">
+              <h3>Resultado e avaliação</h3>
+              <div className="detail-grid">
+                <Detail label="Resultado" value={data.resultado} />
+                <Detail label="Frequência" value={formatNumber(data.frequencia, '%')} />
+                {data.notaAd !== null && data.notaAd !== undefined && (
+                  <Detail label="Nota AD" value={formatNumber(data.notaAd)} />
+                )}
+                {data.notaOd !== null && data.notaOd !== undefined && (
+                  <Detail label="Nota OD" value={formatNumber(data.notaOd)} />
+                )}
+                {data.notaAf !== null && data.notaAf !== undefined && (
+                  <Detail label="Nota AF" value={formatNumber(data.notaAf)} />
+                )}
+                {data.mediaFinal !== null && data.mediaFinal !== undefined && (
+                  <Detail label="Média Final" value={formatNumber(data.mediaFinal)} />
+                )}
+              </div>
+            </section>
           </div>
         )}
       </div>
+
+      {data && showSuccessNotice && (
+        <div className="verification-toast" role="status" aria-live="polite">
+          <CheckCircle2 size={24} aria-hidden="true" />
+          <div className="verification-toast-copy">
+            <b>Certificado Autêntico e Válido</b>
+            <span>Registro localizado na base oficial de certificações do CETRAN/PA.</span>
+          </div>
+          <button
+            type="button"
+            className="verification-toast-close"
+            onClick={() => setShowSuccessNotice(false)}
+            aria-label="Fechar aviso"
+            title="Fechar aviso"
+          >
+            <X size={18} aria-hidden="true" />
+          </button>
+        </div>
+      )}
 
       {!embedded && (
         <p className="public-footer" style={{ textAlign: 'center', marginTop: '28px', color: '#64748b', fontSize: '12px' }}>
@@ -1714,9 +1736,9 @@ function PublicValidation({ onBack, embedded = false, onLoginClick }) {
 
 function Detail({ label, value, highlight = false }) {
   return (
-    <div className="detail" style={{ background: highlight ? '#eff6ff' : '#f8fafc', border: highlight ? '1px solid #bfdbfe' : '1px solid #f1f5f9' }}>
-      <small style={{ color: highlight ? '#1d4ed8' : '#64748b' }}>{label}</small>
-      <b style={{ color: highlight ? '#1e3a8a' : '#0f172a', fontSize: highlight ? '14px' : '13px' }}>{value || '—'}</b>
+    <div className={`detail${highlight ? ' highlight' : ''}`}>
+      <small>{label}</small>
+      <b>{value || '—'}</b>
     </div>
   );
 }

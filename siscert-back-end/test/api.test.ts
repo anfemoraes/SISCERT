@@ -125,6 +125,15 @@ describe('API', () => {
     expect(porMunicipio.json().itens).toHaveLength(2);
   });
 
+  it('listar todos ignora paginação, tamanho e filtros', async () => {
+    const r = await app.inject('/certificacoes?todos=1&nome=nao-existe&tamanho=1&pagina=2');
+    const resultado = r.json();
+
+    expect(r.statusCode).toBe(200);
+    expect(resultado.total).toBeGreaterThan(1);
+    expect(resultado.itens).toHaveLength(resultado.total);
+  });
+
   it('curingas digitados não viram coringa do LIKE', async () => {
     const r = await app.inject('/certificacoes?nome=%25%25');
     expect(r.json().total).toBe(0);
