@@ -173,7 +173,7 @@ function buildAtaFromSpreadsheet(rows) {
     .filter(key => indexes[key] === undefined)
     .map(key => spreadsheetColumns.find(column => column.key === key).header);
   if (missingHeaders.length) {
-    throw new Error(`Colunas obrigatórias ausentes: ${missingHeaders.join(', ')}.`);
+    throw new Error(`Colunas obrigatórias ausentes: ${missingHeaders.join(', ')}`);
   }
 
   const dataRows = rows.slice(1).filter(row => row.some(cell => String(cell ?? '').trim() !== ''));
@@ -233,10 +233,10 @@ function buildAtaFromSpreadsheet(rows) {
         invalid_notaOd: 'Nota OD deve estar entre 0 e 10.',
         invalid_notaAf: 'Nota AF deve estar entre 0 e 10.',
         invalid_mediaFinal: 'Média final deve estar entre 0 e 10.',
-        missing_notaAd: 'Nota AD é obrigatória para CFAT/CFATR.',
-        missing_notaOd: 'Nota OD é obrigatória para CFAT/CFATR.',
-        missing_notaAf: 'Nota AF é obrigatória para CFAT/CFATR.',
-        missing_mediaFinal: 'Média final é obrigatória para CFAT/CFATR.'
+        missing_notaAd: 'Nota AD é obrigatória para CFAT/CFATR',
+        missing_notaOd: 'Nota OD é obrigatória para CFAT/CFATR',
+        missing_notaAf: 'Nota AF é obrigatória para CFAT/CFATR',
+        missing_mediaFinal: 'Média final é obrigatória para CFAT/CFATR'
       }[key]));
     if (rowErrors.length) errors.push(`Linha ${lineNumber}: ${rowErrors.join(' ')}`);
 
@@ -569,7 +569,7 @@ function Login({ onSuccess, onPublic }) {
             Entre com suas credenciais do SISCERT.
           </p>
 
-          <label className="field-label login-email-label" htmlFor="login-email"><Mail size={16} aria-hidden="true" /> <span>E-mail institucional<span className="required-mark" aria-hidden="true">*</span></span></label>
+          <label className="field-label login-email-label" htmlFor="login-email"><Mail size={16} aria-hidden="true" /> <span>E-mail institucional</span></label>
           <input
             id="login-email"
             className="input"
@@ -581,7 +581,7 @@ function Login({ onSuccess, onPublic }) {
             required
           />
 
-          <label className="field-label" htmlFor="login-password"><span>Senha<span className="required-mark" aria-hidden="true">*</span></span></label>
+          <label className="field-label" htmlFor="login-password"><span>Senha</span></label>
           <div className="password-wrap">
             <input
               id="login-password"
@@ -927,7 +927,7 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                 </b>
                 <div className="form-grid" style={{ marginTop: 0 }}>
                   <label className="wide">
-                    <span>Nome completo<span className="required-mark" aria-hidden="true">*</span></span>
+                    <span>Nome completo</span>
                     <input
                       className="input"
                       required
@@ -952,7 +952,7 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                     />
                   </label>
                   <label>
-                    <span>Cargo / Função<span className="required-mark" aria-hidden="true">*</span></span>
+                    <span>Cargo / Função</span>
                     <input
                       className="input"
                       required
@@ -963,7 +963,7 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                     />
                   </label>
                   <label>
-                    <span>Frequência (%)<span className="required-mark" aria-hidden="true">*</span></span>
+                    <span>Frequência (%)</span>
                     <input
                       className="input"
                       type="number"
@@ -984,7 +984,7 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                 </b>
                 <div className="form-grid" style={{ marginTop: 0 }}>
                   <label>
-                    <span>Curso homologado<span className="required-mark" aria-hidden="true">*</span></span>
+                    <span>Curso homologado</span>
                     <select className="input" required value={formData.curso} onChange={e => updateField('curso', e.target.value)}>
                       {courses.map(c => (
                         <option key={c} value={c}>{c}</option>
@@ -992,7 +992,7 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                     </select>
                   </label>
                   <label>
-                    <span>Município<span className="required-mark" aria-hidden="true">*</span></span>
+                    <span>Município</span>
                     <input
                       className="input"
                       required
@@ -1003,7 +1003,7 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                     />
                   </label>
                   <label>
-                    <span>Data de Início<span className="required-mark" aria-hidden="true">*</span></span>
+                    <span>Data de Início</span>
                     <input
                       className="input"
                       type="date"
@@ -1013,7 +1013,7 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                     />
                   </label>
                   <label>
-                    <span>Data de Conclusão<span className="required-mark" aria-hidden="true">*</span></span>
+                    <span>Data de Conclusão</span>
                     <input
                       className="input"
                       type="date"
@@ -1032,7 +1032,7 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                 <div className="form-grid" style={{ marginTop: 0 }}>
                   <>
                       <label>
-                        <span>Nota AD{requiresGrades && <span className="required-mark" aria-hidden="true">*</span>}</span>
+                        <span>Nota AD</span>
                         <input
                           className="input"
                           type="number"
@@ -1045,7 +1045,7 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                         />
                       </label>
                       <label>
-                        <span>Nota OD{requiresGrades && <span className="required-mark" aria-hidden="true">*</span>}</span>
+                        <span>Nota OD</span>
                         <input
                           className="input"
                           type="number"
@@ -1058,7 +1058,7 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                         />
                       </label>
                       <label>
-                        <span>Nota AF{requiresGrades && <span className="required-mark" aria-hidden="true">*</span>}</span>
+                        <span>Nota AF</span>
                         <input
                           className="input"
                           type="number"
@@ -1071,7 +1071,7 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                         />
                       </label>
                       <label>
-                        <span>Média Final{requiresGrades && <span className="required-mark" aria-hidden="true">*</span>}</span>
+                        <span>Média Final</span>
                         <input
                           className="input"
                           type="number"
@@ -1086,7 +1086,7 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                   </>
 
                   <label className="wide">
-                    <span>Resultado Final<span className="required-mark" aria-hidden="true">*</span></span>
+                    <span>Resultado Final</span>
                     <select className="input" required value={formData.resultado} onChange={e => updateField('resultado', e.target.value)}>
                       <option value="APROVADO">APROVADO (Possui / gera código oficial)</option>
                       <option value="REPROVADO">REPROVADO (Sem emissão de código)</option>
@@ -1709,7 +1709,7 @@ function NewAta({ onDone }) {
           <h2>1. Dados do Curso e Município</h2>
           <div className="form-grid">
             <label>
-              <span>Curso homologado<span className="required-mark" aria-hidden="true">*</span></span>
+              <span>Curso homologado</span>
               <select className="input" required value={ata.curso} onChange={e => updateAta('curso', e.target.value)}>
                 {courses.map(c => (
                   <option key={c}>{c}</option>
@@ -1717,7 +1717,7 @@ function NewAta({ onDone }) {
               </select>
             </label>
             <label>
-              <span>Município<span className="required-mark" aria-hidden="true">*</span></span>
+              <span>Município</span>
               <input
                 className="input"
                 required
@@ -1729,11 +1729,11 @@ function NewAta({ onDone }) {
               />
             </label>
             <label>
-              <span>Data de Início<span className="required-mark" aria-hidden="true">*</span></span>
+              <span>Data de Início</span>
               <input className="input" type="date" required value={ata.periodoInicio} onChange={e => updateAta('periodoInicio', e.target.value)} />
             </label>
             <label>
-              <span>Data de Conclusão<span className="required-mark" aria-hidden="true">*</span></span>
+              <span>Data de Conclusão</span>
               <input className="input" type="date" required value={ata.periodoFim} onChange={e => updateAta('periodoFim', e.target.value)} />
             </label>
           </div>
@@ -1763,7 +1763,7 @@ function NewAta({ onDone }) {
               <div className="form-grid">
                 <div className="form-section-label wide">Identificação do concluinte</div>
                 <label>
-                  <span>Nome completo<span className="required-mark" aria-hidden="true">*</span></span>
+                  <span>Nome completo</span>
                   <input
                     className="input"
                     required
@@ -1777,7 +1777,7 @@ function NewAta({ onDone }) {
                 </label>
 
                 <label>
-                  <span>CPF<span className="required-mark" aria-hidden="true">*</span></span>
+                  <span>CPF</span>
                   <input
                     className="input"
                     required
@@ -1793,7 +1793,7 @@ function NewAta({ onDone }) {
                 </label>
 
                 <label>
-                  <span>Cargo ou Função<span className="required-mark" aria-hidden="true">*</span></span>
+                  <span>Cargo ou Função</span>
                   <input
                     className="input"
                     required
@@ -1807,7 +1807,7 @@ function NewAta({ onDone }) {
 
                 <div className="form-section-label wide">Avaliação do curso</div>
                 <label>
-                  <span>Frequência (%)<span className="required-mark" aria-hidden="true">*</span></span>
+                  <span>Frequência (%)</span>
                   <input
                     className="input"
                     type="number"
@@ -1822,7 +1822,7 @@ function NewAta({ onDone }) {
 
                 {['notaAd', 'notaOd', 'notaAf', 'mediaFinal'].map(k => (
                   <label key={k}>
-                    <span>{{ notaAd: 'Nota AD', notaOd: 'Nota OD', notaAf: 'Nota AF', mediaFinal: 'Média final' }[k]}{requiresGrades && <span className="required-mark" aria-hidden="true">*</span>}</span>
+                    <span>{{ notaAd: 'Nota AD', notaOd: 'Nota OD', notaAf: 'Nota AF', mediaFinal: 'Média final' }[k]}</span>
                     <input
                       className="input"
                       type="number"
@@ -1837,7 +1837,7 @@ function NewAta({ onDone }) {
                 ))}
 
                 <label>
-                  <span>Resultado final<span className="required-mark" aria-hidden="true">*</span></span>
+                  <span>Resultado final</span>
                   <select className="input" required value={p.resultado} onChange={e => updatePerson(i, 'resultado', e.target.value)}>
                     <option value="APROVADO">APROVADO</option>
                     <option value="REPROVADO">REPROVADO</option>
@@ -2020,7 +2020,7 @@ function PublicValidation({ onBack, embedded = false, onLoginClick }) {
 
         <form onSubmit={verify} className="verify-form">
           <label className="field-label" style={{ fontWeight: 600, color: '#334155' }}>
-            <span>Código do certificado<span className="required-mark" aria-hidden="true">*</span></span>
+            <span>Código do certificado</span>
           </label>
           <input
             className="input code-input"

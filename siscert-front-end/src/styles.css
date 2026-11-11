@@ -1527,12 +1527,6 @@ textarea:disabled {
   color: #526579;
 }
 
-.required-mark {
-  margin-left: 1px;
-  color: #dc2626;
-  font-weight: 700;
-}
-
 .person-card {
   padding: 18px;
   border: 1px solid var(--color-border);
