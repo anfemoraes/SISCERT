@@ -37,13 +37,13 @@ export const certificacoes = pgTable(
     cargoFuncao: varchar('cargo_funcao', { length: 120 }).notNull(),
     cpf: varchar('cpf', { length: 11 }).notNull(), // somente dígitos
 
-    frequencia: numeric('frequencia', { precision: 5, scale: 2 }).notNull(),
+    frequencia: numeric('frequencia', { precision: 5, scale: 2 }),
     // Nulas porque os cursos de atualização (CAAT/CAATR) não têm nota
     notaAd: numeric('nota_ad', { precision: 5, scale: 2 }),
     notaOd: numeric('nota_od', { precision: 5, scale: 2 }),
     notaAf: numeric('nota_af', { precision: 5, scale: 2 }),
     mediaFinal: numeric('media_final', { precision: 5, scale: 2 }),
-    resultado: resultadoEnum('resultado').notNull(),
+    resultado: resultadoEnum('resultado'),
 
     observacoes: text('observacoes'),
     criadoEm: timestamp('criado_em', { withTimezone: true }).defaultNow().notNull(),

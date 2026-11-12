@@ -91,7 +91,10 @@ function parseSpreadsheetCsv(text) {
 
   if (quoted) throw new Error('O CSV contém aspas sem fechamento.');
   rows[rows.length - 1].push(value);
-  return rows.filter(row => row.some(cell => String(cell).trim() !== ''));
+  while (rows.length > 1 && !rows[rows.length - 1].some(cell => String(cell).trim() !== '')) {
+    rows.pop();
+  }
+  return rows;
 }
 
 function spreadsheetCellText(value) {
@@ -168,7 +171,7 @@ function buildAtaFromSpreadsheet(rows) {
       candidates.map(candidate => headerIndexes.get(candidate)).find(index => index !== undefined)
     ])
   );
-  const requiredKeys = ['curso', 'municipio', 'periodoInicio', 'periodoFim', 'nome', 'cpf', 'cargoFuncao', 'frequencia', 'resultado'];
+  const requiredKeys = ['curso', 'municipio', 'periodoInicio', 'periodoFim', 'cpf'];
   const missingHeaders = requiredKeys
     .filter(key => indexes[key] === undefined)
     .map(key => spreadsheetColumns.find(column => column.key === key).header);
@@ -176,14 +179,25 @@ function buildAtaFromSpreadsheet(rows) {
     throw new Error(`Colunas obrigatórias ausentes: ${missingHeaders.join(', ')}`);
   }
 
-  const dataRows = rows.slice(1).filter(row => row.some(cell => String(cell ?? '').trim() !== ''));
+  const dataRows = rows
+    .slice(1)
+    .map((row, index) => ({ row, lineNumber: index + 2 }))
+    .filter(({ row }) => row.some(cell => String(cell ?? '').trim() !== ''));
   if (!dataRows.length) throw new Error('Adicione ao menos um concluinte abaixo do cabeçalho.');
   if (dataRows.length > 50) throw new Error('O arquivo contém mais de 50 concluintes. O limite por ata é 50.');
 
+  const cpfLines = new Map();
+  dataRows.forEach(({ row, lineNumber }) => {
+    const rawCpf = String(spreadsheetCellText(row[indexes.cpf])).trim();
+    const cpfDigits = /^\d{9,10}$/.test(rawCpf) ? rawCpf.padStart(11, '0') : rawCpf.replace(/\D/g, '');
+    if (/^\d{11}$/.test(cpfDigits)) {
+      cpfLines.set(cpfDigits, [...(cpfLines.get(cpfDigits) || []), lineNumber]);
+    }
+  });
+
   const errors = [];
   let ataDados = null;
-  const concluintes = dataRows.map((row, index) => {
-    const lineNumber = index + 2;
+  const concluintes = dataRows.map(({ row, lineNumber }) => {
     const getValue = key => indexes[key] === undefined ? '' : spreadsheetCellText(row[indexes[key]]);
     const curso = String(getValue('curso')).trim().toUpperCase();
     const municipio = String(getValue('municipio')).trim();
@@ -193,7 +207,8 @@ function buildAtaFromSpreadsheet(rows) {
     const rawCpf = String(getValue('cpf')).trim();
     const cpfDigits = /^\d{9,10}$/.test(rawCpf) ? rawCpf.padStart(11, '0') : rawCpf.replace(/\D/g, '');
     const cargoFuncao = String(getValue('cargoFuncao')).trim();
-    const frequencia = parseSpreadsheetNumber(getValue('frequencia'));
+    const rawFrequencia = String(getValue('frequencia') ?? '').trim();
+    const frequencia = parseSpreadsheetNumber(rawFrequencia);
     const resultado = String(getValue('resultado')).trim().toUpperCase();
     const metadata = { curso, municipio, periodoInicio, periodoFim };
     const notes = {};
@@ -203,18 +218,18 @@ function buildAtaFromSpreadsheet(rows) {
     if (!periodoInicio || !periodoFim || periodoFim < periodoInicio) notes.invalidPeriod = true;
     if (ataDados && Object.keys(metadata).some(key => metadata[key] !== ataDados[key])) notes.mixedAta = true;
     if (!ataDados) ataDados = metadata;
-    if (nome.length < 3 || nome.length > 200) notes.invalidName = true;
-    if (!/^\d{11}$/.test(cpfDigits)) notes.invalidCpf = true;
-    if (cargoFuncao.length < 2 || cargoFuncao.length > 120) notes.invalidRole = true;
-    if (frequencia === null || frequencia < 0 || frequencia > 100) notes.invalidAttendance = true;
-    if (!['APROVADO', 'REPROVADO'].includes(resultado)) notes.invalidResult = true;
+    if (nome && (nome.length < 3 || nome.length > 200)) notes.invalidName = true;
+    if (!cpfValido(cpfDigits)) notes.invalidCpf = true;
+    if (cargoFuncao && (cargoFuncao.length < 2 || cargoFuncao.length > 120)) notes.invalidRole = true;
+    if (cpfLines.get(cpfDigits)?.length > 1) notes.duplicateCpf = true;
+    if (rawFrequencia && (frequencia === null || frequencia < 0 || frequencia > 100)) notes.invalidAttendance = true;
+    if (resultado && !['APROVADO', 'REPROVADO'].includes(resultado)) notes.invalidResult = true;
 
     const grades = {};
     for (const key of ['notaAd', 'notaOd', 'notaAf', 'mediaFinal']) {
       const rawGrade = getValue(key);
       const grade = parseSpreadsheetNumber(rawGrade);
       if (String(rawGrade ?? '').trim() && (grade === null || grade < 0 || grade > 10)) notes[`invalid_${key}`] = true;
-      if (courses.includes(curso) && ['CFAT', 'CFATR'].includes(curso) && grade === null) notes[`missing_${key}`] = true;
       grades[key] = grade === null ? '' : String(grade);
     }
 
@@ -224,19 +239,16 @@ function buildAtaFromSpreadsheet(rows) {
         invalidMunicipality: 'Município deve ter ao menos 2 caracteres.',
         invalidPeriod: 'Datas inválidas ou conclusão anterior ao início.',
         mixedAta: 'Os dados do curso, município e período devem ser iguais em todas as linhas.',
-        invalidName: 'Nome deve ter entre 3 e 200 caracteres.',
-        invalidCpf: 'CPF deve conter 11 dígitos.',
-        invalidRole: 'Cargo ou função deve ter entre 2 e 120 caracteres.',
+        invalidName: 'Nome deve ter no máximo 200 caracteres e, se informado, ao menos 3.',
+        invalidCpf: 'CPF inválido: confira os 11 dígitos e os dígitos verificadores.',
+        duplicateCpf: `CPF repetido nas linhas ${cpfLines.get(cpfDigits)?.join(', ')}.`,
+        invalidRole: 'Cargo ou função deve ter no máximo 120 caracteres e, se informado, ao menos 2.',
         invalidAttendance: 'Frequência deve ser um número entre 0 e 100.',
         invalidResult: 'Resultado deve ser APROVADO ou REPROVADO.',
         invalid_notaAd: 'Nota AD deve estar entre 0 e 10.',
         invalid_notaOd: 'Nota OD deve estar entre 0 e 10.',
         invalid_notaAf: 'Nota AF deve estar entre 0 e 10.',
-        invalid_mediaFinal: 'Média final deve estar entre 0 e 10.',
-        missing_notaAd: 'Nota AD é obrigatória para CFAT/CFATR',
-        missing_notaOd: 'Nota OD é obrigatória para CFAT/CFATR',
-        missing_notaAf: 'Nota AF é obrigatória para CFAT/CFATR',
-        missing_mediaFinal: 'Média final é obrigatória para CFAT/CFATR'
+        invalid_mediaFinal: 'Média final deve estar entre 0 e 10.'
       }[key]));
     if (rowErrors.length) errors.push(`Linha ${lineNumber}: ${rowErrors.join(' ')}`);
 
@@ -306,7 +318,24 @@ async function api(path, options = {}) {
   const data = response.status === 204 ? null : await response.json().catch(() => ({ erro: 'Resposta inválida do servidor' }));
   if (!response.ok) {
     if (response.status === 401) window.dispatchEvent(new Event('siscert:unauthorized'));
-    throw new Error(data?.erro || `Erro ${response.status}`);
+    const detalhes = data?.detalhes?.map(({ campo, mensagem }) => {
+      const match = campo.replace(/\//g, '.').match(/concluintes\.(\d+)\.(\w+)/);
+      if (!match) return `${campo}: ${mensagem}`;
+      const campos = {
+        nome: 'Nome',
+        cpf: 'CPF',
+        cargoFuncao: 'Cargo ou função',
+        frequencia: 'Frequência',
+        notaAd: 'Nota AD',
+        notaOd: 'Nota OD',
+        notaAf: 'Nota AF',
+        mediaFinal: 'Média final',
+        resultado: 'Resultado',
+        observacoes: 'Observações'
+      };
+      return `Concluinte ${Number(match[1]) + 1} — ${campos[match[2]] || match[2]}: ${mensagem}`;
+    }) || [];
+    throw new Error([data?.erro || `Erro ${response.status}`, ...detalhes].join('\n'));
   }
   return data;
 }
@@ -844,18 +873,16 @@ function EditCertificateModal({ cert, onClose, onSave }) {
     curso: cert.curso || 'CFAT',
     periodoInicio: cert.periodoInicio || '',
     periodoFim: cert.periodoFim || '',
-    frequencia: cert.frequencia !== undefined && cert.frequencia !== null ? String(cert.frequencia) : '100',
+    frequencia: cert.frequencia !== undefined && cert.frequencia !== null ? String(cert.frequencia) : '',
     notaAd: cert.notaAd !== undefined && cert.notaAd !== null ? String(cert.notaAd) : '',
     notaOd: cert.notaOd !== undefined && cert.notaOd !== null ? String(cert.notaOd) : '',
     notaAf: cert.notaAf !== undefined && cert.notaAf !== null ? String(cert.notaAf) : '',
     mediaFinal: cert.mediaFinal !== undefined && cert.mediaFinal !== null ? String(cert.mediaFinal) : '',
-    resultado: cert.resultado || 'APROVADO',
+    resultado: cert.resultado || '',
     observacoes: cert.observacoes || ''
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-
-  const requiresGrades = ['CFAT', 'CFATR'].includes(formData.curso);
 
   function updateField(k, v) {
     setFormData(prev => ({ ...prev, [k]: v }));
@@ -873,8 +900,8 @@ function EditCertificateModal({ cert, onClose, onSave }) {
       curso: formData.curso,
       periodoInicio: formData.periodoInicio,
       periodoFim: formData.periodoFim,
-      frequencia: Number(formData.frequencia),
-      resultado: formData.resultado,
+      frequencia: formData.frequencia === '' ? null : Number(formData.frequencia),
+      resultado: formData.resultado || null,
       observacoes: formData.observacoes ? formData.observacoes.trim() : null
     };
 
@@ -930,8 +957,6 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                     <span>Nome completo</span>
                     <input
                       className="input"
-                      required
-                      minLength={3}
                       maxLength={200}
                       autoComplete="name"
                       value={formData.nome}
@@ -955,8 +980,6 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                     <span>Cargo / Função</span>
                     <input
                       className="input"
-                      required
-                      minLength={2}
                       maxLength={120}
                       value={formData.cargoFuncao}
                       onChange={e => updateField('cargoFuncao', e.target.value)}
@@ -970,7 +993,6 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                       min="0"
                       max="100"
                       step="0.01"
-                      required
                       value={formData.frequencia}
                       onChange={e => updateField('frequencia', e.target.value)}
                     />
@@ -1039,7 +1061,6 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                           min="0"
                           max="10"
                           step="0.01"
-                          required={requiresGrades}
                           value={formData.notaAd}
                           onChange={e => updateField('notaAd', e.target.value)}
                         />
@@ -1052,7 +1073,6 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                           min="0"
                           max="10"
                           step="0.01"
-                          required={requiresGrades}
                           value={formData.notaOd}
                           onChange={e => updateField('notaOd', e.target.value)}
                         />
@@ -1065,7 +1085,6 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                           min="0"
                           max="10"
                           step="0.01"
-                          required={requiresGrades}
                           value={formData.notaAf}
                           onChange={e => updateField('notaAf', e.target.value)}
                         />
@@ -1078,7 +1097,6 @@ function EditCertificateModal({ cert, onClose, onSave }) {
                           min="0"
                           max="10"
                           step="0.01"
-                          required={requiresGrades}
                           value={formData.mediaFinal}
                           onChange={e => updateField('mediaFinal', e.target.value)}
                         />
@@ -1087,7 +1105,8 @@ function EditCertificateModal({ cert, onClose, onSave }) {
 
                   <label className="wide">
                     <span>Resultado Final</span>
-                    <select className="input" required value={formData.resultado} onChange={e => updateField('resultado', e.target.value)}>
+                    <select className="input" value={formData.resultado} onChange={e => updateField('resultado', e.target.value)}>
+                      <option value="">Não informado</option>
                       <option value="APROVADO">APROVADO (Possui / gera código oficial)</option>
                       <option value="REPROVADO">REPROVADO (Sem emissão de código)</option>
                     </select>
@@ -1627,11 +1646,12 @@ function NewAta({ onDone }) {
       ...ata,
       concluintes: ata.concluintes.map(p => ({
         ...p,
-        frequencia: Number(p.frequencia),
-        notaAd: p.notaAd === '' ? undefined : Number(p.notaAd),
-        notaOd: p.notaOd === '' ? undefined : Number(p.notaOd),
-        notaAf: p.notaAf === '' ? undefined : Number(p.notaAf),
-        mediaFinal: p.mediaFinal === '' ? undefined : Number(p.mediaFinal)
+        frequencia: p.frequencia === '' ? null : Number(p.frequencia),
+        notaAd: p.notaAd === '' ? null : Number(p.notaAd),
+        notaOd: p.notaOd === '' ? null : Number(p.notaOd),
+        notaAf: p.notaAf === '' ? null : Number(p.notaAf),
+        mediaFinal: p.mediaFinal === '' ? null : Number(p.mediaFinal),
+        resultado: p.resultado || null
       }))
     };
 
@@ -1651,8 +1671,6 @@ function NewAta({ onDone }) {
       setBusy(false);
     }
   }
-
-  const requiresGrades = ['CFAT', 'CFATR'].includes(ata.curso);
 
   return (
     <>
@@ -1675,7 +1693,7 @@ function NewAta({ onDone }) {
               Importe um arquivo Excel (.xlsx) ou CSV. Cada linha deve conter um concluinte; os dados do curso e período devem se repetir em todas as linhas.
             </p>
             <small className="import-hint">
-              A planilha será carregada para revisão. Limite de 50 concluintes por ata. CPF deve ter 11 dígitos; datas aceitas: DD/MM/AAAA ou AAAA-MM-DD.
+              A planilha será carregada para revisão. Limite de 50 concluintes por ata. CPF é obrigatório e validado; os demais dados do concluinte podem ficar vazios. Campos de texto vazios serão registrados como XXXXXX; números e resultado ficam vazios. Datas aceitas: DD/MM/AAAA ou AAAA-MM-DD.
             </small>
           </div>
         </div>
@@ -1766,8 +1784,6 @@ function NewAta({ onDone }) {
                   <span>Nome completo</span>
                   <input
                     className="input"
-                    required
-                    minLength={3}
                     maxLength={200}
                     autoComplete="name"
                     value={p.nome}
@@ -1796,8 +1812,6 @@ function NewAta({ onDone }) {
                   <span>Cargo ou Função</span>
                   <input
                     className="input"
-                    required
-                    minLength={2}
                     maxLength={120}
                     value={p.cargoFuncao}
                     onChange={e => updatePerson(i, 'cargoFuncao', e.target.value)}
@@ -1814,7 +1828,6 @@ function NewAta({ onDone }) {
                     min="0"
                     max="100"
                     step="0.01"
-                    required
                     value={p.frequencia}
                     onChange={e => updatePerson(i, 'frequencia', e.target.value)}
                   />
@@ -1829,7 +1842,6 @@ function NewAta({ onDone }) {
                       min="0"
                       max="10"
                       step="0.01"
-                      required={requiresGrades}
                       value={p[k]}
                       onChange={e => updatePerson(i, k, e.target.value)}
                     />
@@ -1838,7 +1850,8 @@ function NewAta({ onDone }) {
 
                 <label>
                   <span>Resultado final</span>
-                  <select className="input" required value={p.resultado} onChange={e => updatePerson(i, 'resultado', e.target.value)}>
+                  <select className="input" value={p.resultado} onChange={e => updatePerson(i, 'resultado', e.target.value)}>
+                    <option value="">Não informado</option>
                     <option value="APROVADO">APROVADO</option>
                     <option value="REPROVADO">REPROVADO</option>
                   </select>
@@ -1920,12 +1933,12 @@ function blankPerson() {
     nome: '',
     cpf: '',
     cargoFuncao: '',
-    frequencia: '100',
+    frequencia: '',
     notaAd: '',
     notaOd: '',
     notaAf: '',
     mediaFinal: '',
-    resultado: 'APROVADO',
+    resultado: '',
     observacoes: ''
   };
 }
@@ -2145,6 +2158,16 @@ function formatCpf(value) {
     .replace(/^(\d{3})(\d)/, '$1.$2')
     .replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
     .replace(/\.(\d{3})(\d)/, '.$1-$2');
+}
+
+function cpfValido(cpf) {
+  if (!/^\d{11}$/.test(cpf) || /^(\d)\1{10}$/.test(cpf)) return false;
+  for (const tamanho of [9, 10]) {
+    let soma = 0;
+    for (let i = 0; i < tamanho; i++) soma += Number(cpf[i]) * (tamanho + 1 - i);
+    if (((soma * 10) % 11) % 10 !== Number(cpf[tamanho])) return false;
+  }
+  return true;
 }
 
 function getInitials(name) {

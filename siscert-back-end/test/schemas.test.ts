@@ -24,10 +24,29 @@ describe('ataSchema', () => {
     expect(ataSchema.safeParse(ata('CAAT', [concluinte(1)])).success).toBe(true);
   });
 
-  it('exige notas na formação', () => {
-    const r = ataSchema.safeParse(ata('CFAT', [concluinte(1)]));
-    expect(r.success).toBe(false);
-    expect(r.error?.issues.map((i) => i.path.join('.'))).toContain('concluintes.0.notaAd');
+  it('permite dados do concluinte em branco e marca campos textuais', () => {
+    const r = ataSchema.parse(
+      ata('CFAT', [
+        concluinte(1, {
+          nome: '',
+          cargoFuncao: '',
+          frequencia: null,
+          notaAd: null,
+          notaOd: null,
+          notaAf: null,
+          mediaFinal: null,
+          resultado: null,
+          observacoes: '',
+        }),
+      ]),
+    );
+    expect(r.concluintes[0]).toMatchObject({
+      nome: 'XXXXXX',
+      cargoFuncao: 'XXXXXX',
+      frequencia: null,
+      resultado: null,
+      observacoes: 'XXXXXX',
+    });
   });
 
   it('aceita formação com todas as notas', () => {

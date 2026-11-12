@@ -82,10 +82,45 @@ describe('API', () => {
     expect(r3.json()[0].codigo).toBe('CAAT2026.0001');
   });
 
-  it('rejeita formação sem notas com 400 e detalhes', async () => {
-    const r = await cadastrar(ata([concluinte(20)], { curso: 'CFATR' }));
+  it('permite dados opcionais vazios e conserva os marcadores textuais', async () => {
+    const r = await cadastrar(
+      ata([
+        concluinte(20, {
+          nome: '',
+          cargoFuncao: '',
+          frequencia: null,
+          notaAd: null,
+          notaOd: null,
+          notaAf: null,
+          mediaFinal: null,
+          resultado: null,
+          observacoes: '',
+        }),
+      ], { curso: 'CFATR' }),
+    );
+    expect(r.statusCode).toBe(201);
+    expect(r.json()[0]).toMatchObject({
+      nome: 'XXXXXX',
+      cargoFuncao: 'XXXXXX',
+      frequencia: null,
+      notaAd: null,
+      resultado: null,
+      observacoes: 'XXXXXX',
+      codigo: null,
+    });
+  });
+
+  it('identifica o concluinte com CPF repetido na própria ata', async () => {
+    const repetido = concluinte(21);
+    const r = await cadastrar(ata([repetido, repetido]));
+
     expect(r.statusCode).toBe(400);
-    expect(r.json().detalhes.some((d: any) => d.campo.includes('notaAd'))).toBe(true);
+    expect(r.json().detalhes).toContainEqual(
+      expect.objectContaining({
+        campo: expect.stringContaining('concluintes.1.cpf'),
+        mensagem: 'CPF repetido na mesma ata',
+      }),
+    );
   });
 
   it('CPF duplicado no mesmo curso/período dá 409, grava nada e não queima número', async () => {
@@ -96,6 +131,8 @@ describe('API', () => {
       ata([concluinte(31), existente, concluinte(32)], { periodoFim: '2025-11-30', periodoInicio: '2025-11-01' }),
     );
     expect(falha.statusCode).toBe(409);
+    expect(falha.json().erro).toContain('Concluinte 2');
+    expect(falha.json().erro).toContain('CPF final');
 
     const busca = await app.inject('/certificacoes?nome=Agente%2031');
     expect(busca.json().total).toBe(0);

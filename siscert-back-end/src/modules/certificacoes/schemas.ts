@@ -2,8 +2,6 @@ import { z } from 'zod';
 import { cpfValido, soDigitos } from '../../shared/cpf.js';
 
 export const CURSOS = ['CFAT', 'CFATR', 'CAAT', 'CAATR'] as const;
-/** Cursos de formação exigem notas; os de atualização são avaliados por observação (Res. 004/2025). */
-export const CURSOS_COM_NOTA: readonly string[] = ['CFAT', 'CFATR'];
 /** Ajuste se a escala de notas do CETRAN for outra (ex.: 100). */
 export const NOTA_MAXIMA = 10;
 /** Item 6.3 do Anexo I e 6.6 do Anexo II da Res. 004/2025. */
@@ -17,6 +15,16 @@ const texto = (min: number, max: number) =>
     .max(max)
     .transform((s) => s.replace(/\s+/g, ' '));
 
+const textoComMarcador = (max: number) =>
+  z.preprocess(
+    (valor) => (valor === undefined || valor === null ? 'XXXXXX' : valor),
+    z
+      .string()
+      .trim()
+      .transform((s) => s.replace(/\s+/g, ' ') || 'XXXXXX')
+      .pipe(z.string().max(max)),
+  );
+
 const nota = z.number().min(0).max(NOTA_MAXIMA);
 
 const cpf = z
@@ -25,16 +33,16 @@ const cpf = z
   .refine(cpfValido, { message: 'CPF inválido' });
 
 const concluinteSchema = z.object({
-  nome: texto(3, 200),
-  cargoFuncao: texto(2, 120),
+  nome: textoComMarcador(200),
+  cargoFuncao: textoComMarcador(120),
   cpf,
-  frequencia: z.number().min(0).max(100),
-  notaAd: nota.optional(),
-  notaOd: nota.optional(),
-  notaAf: nota.optional(),
-  mediaFinal: nota.optional(),
-  resultado: z.enum(['APROVADO', 'REPROVADO']),
-  observacoes: z.string().trim().max(500).optional(),
+  frequencia: z.number().min(0).max(100).nullable().optional(),
+  notaAd: nota.nullable().optional(),
+  notaOd: nota.nullable().optional(),
+  notaAf: nota.nullable().optional(),
+  mediaFinal: nota.nullable().optional(),
+  resultado: z.enum(['APROVADO', 'REPROVADO']).nullable().optional(),
+  observacoes: textoComMarcador(500),
 });
 
 export const ataSchema = z
@@ -64,18 +72,6 @@ export const ataSchema = z
         });
       }
       vistos.add(c.cpf);
-
-      if (CURSOS_COM_NOTA.includes(ata.curso)) {
-        for (const campo of ['notaAd', 'notaOd', 'notaAf', 'mediaFinal'] as const) {
-          if (c[campo] === undefined) {
-            ctx.addIssue({
-              code: 'custom',
-              path: ['concluintes', i, campo],
-              message: 'Obrigatório para cursos de formação (CFAT e CFATR)',
-            });
-          }
-        }
-      }
     });
   });
 
@@ -91,12 +87,12 @@ export const certificacaoSchema = z.object({
   nome: z.string(),
   cargoFuncao: z.string(),
   cpf: z.string().describe('CPF mascarado'),
-  frequencia: z.number(),
+  frequencia: z.number().nullable(),
   notaAd: z.number().nullable(),
   notaOd: z.number().nullable(),
   notaAf: z.number().nullable(),
   mediaFinal: z.number().nullable(),
-  resultado: z.enum(['APROVADO', 'REPROVADO']),
+  resultado: z.enum(['APROVADO', 'REPROVADO']).nullable(),
   observacoes: z.string().nullable(),
 });
 
@@ -134,8 +130,8 @@ export const idParamsSchema = z.object({
 
 export const atualizarCertificacaoSchema = z
   .object({
-    nome: texto(3, 200).optional(),
-    cargoFuncao: texto(2, 120).optional(),
+    nome: textoComMarcador(200).optional(),
+    cargoFuncao: textoComMarcador(120).optional(),
     cpf: z
       .string()
       .transform(soDigitos)
@@ -145,13 +141,13 @@ export const atualizarCertificacaoSchema = z
     curso: z.enum(CURSOS).optional(),
     periodoInicio: z.iso.date().optional(),
     periodoFim: z.iso.date().optional(),
-    frequencia: z.number().min(0).max(100).optional(),
+    frequencia: z.number().min(0).max(100).nullable().optional(),
     notaAd: nota.nullable().optional(),
     notaOd: nota.nullable().optional(),
     notaAf: nota.nullable().optional(),
     mediaFinal: nota.nullable().optional(),
-    resultado: z.enum(['APROVADO', 'REPROVADO']).optional(),
-    observacoes: z.string().trim().max(500).nullable().optional(),
+    resultado: z.enum(['APROVADO', 'REPROVADO']).nullable().optional(),
+    observacoes: textoComMarcador(500).optional(),
   })
   .superRefine((dados, ctx) => {
     if (dados.periodoInicio && dados.periodoFim && dados.periodoFim < dados.periodoInicio) {

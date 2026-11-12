@@ -1,4 +1,4 @@
-import { and, asc, count, eq, sql, type SQL } from 'drizzle-orm';
+import { and, asc, count, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
 import { certificacoes, sequencias } from '../../db/schema.js';
 import type * as schema from '../../db/schema.js';
@@ -32,6 +32,28 @@ export async function proximoNumero(db: Db, curso: Curso, ano: number): Promise<
 export async function inserir(db: Db, valores: NovaLinha): Promise<LinhaCertificacao> {
   const [linha] = await db.insert(certificacoes).values(valores).returning();
   return linha!;
+}
+
+export async function cpfsJaCadastrados(
+  db: Db,
+  curso: Curso,
+  periodoInicio: string,
+  periodoFim: string,
+  cpfs: string[],
+): Promise<string[]> {
+  if (cpfs.length === 0) return [];
+  const linhas = await db
+    .select({ cpf: certificacoes.cpf })
+    .from(certificacoes)
+    .where(
+      and(
+        eq(certificacoes.curso, curso),
+        eq(certificacoes.periodoInicio, periodoInicio),
+        eq(certificacoes.periodoFim, periodoFim),
+        inArray(certificacoes.cpf, cpfs),
+      ),
+    );
+  return linhas.map((linha) => linha.cpf);
 }
 
 export interface FiltrosBusca {

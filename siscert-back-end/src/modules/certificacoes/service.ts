@@ -2,7 +2,6 @@ import { mascararCpf } from '../../shared/cpf.js';
 import { normalizarTexto } from '../../shared/texto.js';
 import * as repo from './repository.js';
 import {
-  CURSOS_COM_NOTA,
   type CertificacaoDto,
   type AtaInput,
   type AtualizarCertificacaoInput,
@@ -38,7 +37,7 @@ export function paraDto(l: repo.LinhaCertificacao): CertificacaoDto {
     nome: l.nome,
     cargoFuncao: l.cargoFuncao,
     cpf: mascararCpf(l.cpf),
-    frequencia: Number(l.frequencia),
+    frequencia: num(l.frequencia),
     notaAd: num(l.notaAd),
     notaOd: num(l.notaOd),
     notaAf: num(l.notaAf),
@@ -54,6 +53,18 @@ export function paraDto(l: repo.LinhaCertificacao): CertificacaoDto {
  */
 export async function cadastrarAta(db: repo.Db, ata: AtaInput): Promise<CertificacaoDto[]> {
   const ano = Number(ata.periodoFim.slice(0, 4));
+  const cpfsDaAta = ata.concluintes.map((concluinte) => concluinte.cpf);
+  const cpfsEmConflito = await repo.cpfsJaCadastrados(
+    db,
+    ata.curso,
+    ata.periodoInicio,
+    ata.periodoFim,
+    cpfsDaAta,
+  );
+
+  if (cpfsEmConflito.length > 0) {
+    throw new ConflitoError(mensagemCpfEmConflito(ata, cpfsEmConflito));
+  }
 
   try {
     const criados = await db.transaction(async (tx) => {
@@ -76,13 +87,13 @@ export async function cadastrarAta(db: repo.Db, ata: AtaInput): Promise<Certific
             nomeBusca: normalizarTexto(c.nome),
             cargoFuncao: c.cargoFuncao,
             cpf: c.cpf,
-            frequencia: c.frequencia.toFixed(2),
+            frequencia: dec(c.frequencia),
             notaAd: dec(c.notaAd),
             notaOd: dec(c.notaOd),
             notaAf: dec(c.notaAf),
             mediaFinal: dec(c.mediaFinal),
-            resultado: c.resultado,
-            observacoes: c.observacoes ?? null,
+            resultado: c.resultado ?? null,
+            observacoes: c.observacoes,
           }),
         );
       }
@@ -91,12 +102,31 @@ export async function cadastrarAta(db: repo.Db, ata: AtaInput): Promise<Certific
     return criados.map(paraDto);
   } catch (err) {
     if (codigoErroPg(err) === '23505') {
-      throw new ConflitoError(
-        'Algum CPF já está cadastrado neste curso e período. Nenhum registro da ata foi gravado.',
+      const cpfsConflitantes = await repo.cpfsJaCadastrados(
+        db,
+        ata.curso,
+        ata.periodoInicio,
+        ata.periodoFim,
+        cpfsDaAta,
       );
+      if (cpfsConflitantes.length > 0) {
+        throw new ConflitoError(mensagemCpfEmConflito(ata, cpfsConflitantes));
+      }
     }
     throw err;
   }
+}
+
+function mensagemCpfEmConflito(ata: AtaInput, cpfs: string[]): string {
+  const cpfsConflitantes = new Set(cpfs);
+  const concluintes = ata.concluintes.flatMap((concluinte, indice) =>
+    cpfsConflitantes.has(concluinte.cpf)
+      ? [
+          `Concluinte ${indice + 1} (${concluinte.nome}; CPF final ${concluinte.cpf.slice(-4)})`,
+        ]
+      : [],
+  );
+  return `CPF já cadastrado neste curso e período para: ${concluintes.join('; ')}. Nenhum registro da ata foi gravado.`;
 }
 
 export async function pesquisar(db: repo.Db, filtros: repo.FiltrosBusca) {
@@ -126,26 +156,10 @@ export async function atualizarCertificado(
   const periodoInicioFinal = dados.periodoInicio ?? existente.periodoInicio;
   const periodoFimFinal = dados.periodoFim ?? existente.periodoFim;
   const anoFinal = Number(periodoFimFinal.slice(0, 4));
-  const resultadoFinal = dados.resultado ?? existente.resultado;
+  const resultadoFinal = dados.resultado !== undefined ? dados.resultado : existente.resultado;
 
   if (periodoFimFinal < periodoInicioFinal) {
     throw new DadosInvalidosError('Data de término não pode ser anterior à data de início.');
-  }
-
-  if (CURSOS_COM_NOTA.includes(cursoFinal)) {
-    const notaAd = dados.notaAd !== undefined ? dados.notaAd : existente.notaAd !== null ? Number(existente.notaAd) : undefined;
-    const notaOd = dados.notaOd !== undefined ? dados.notaOd : existente.notaOd !== null ? Number(existente.notaOd) : undefined;
-    const notaAf = dados.notaAf !== undefined ? dados.notaAf : existente.notaAf !== null ? Number(existente.notaAf) : undefined;
-    const mediaFinal = dados.mediaFinal !== undefined ? dados.mediaFinal : existente.mediaFinal !== null ? Number(existente.mediaFinal) : undefined;
-
-    if (
-      notaAd === undefined || notaAd === null ||
-      notaOd === undefined || notaOd === null ||
-      notaAf === undefined || notaAf === null ||
-      mediaFinal === undefined || mediaFinal === null
-    ) {
-      throw new DadosInvalidosError('Cursos de formação (CFAT e CFATR) exigem as notas AD, OD, AF e Média Final.');
-    }
   }
 
   try {
@@ -154,7 +168,7 @@ export async function atualizarCertificado(
       let numero = existente.numero;
       let ano = existente.ano;
 
-      if (resultadoFinal === 'REPROVADO') {
+      if (resultadoFinal !== 'APROVADO') {
         codigo = null;
         numero = null;
       } else {
@@ -176,12 +190,12 @@ export async function atualizarCertificado(
         ...(dados.curso ? { curso: cursoFinal } : {}),
         ...(dados.periodoInicio ? { periodoInicio: dados.periodoInicio } : {}),
         ...(dados.periodoFim ? { periodoFim: dados.periodoFim, ano: anoFinal } : {}),
-        ...(dados.frequencia !== undefined ? { frequencia: dados.frequencia.toFixed(2) } : {}),
+        ...(dados.frequencia !== undefined ? { frequencia: dec(dados.frequencia) } : {}),
         ...(dados.notaAd !== undefined ? { notaAd: dec(dados.notaAd) } : {}),
         ...(dados.notaOd !== undefined ? { notaOd: dec(dados.notaOd) } : {}),
         ...(dados.notaAf !== undefined ? { notaAf: dec(dados.notaAf) } : {}),
         ...(dados.mediaFinal !== undefined ? { mediaFinal: dec(dados.mediaFinal) } : {}),
-        ...(dados.resultado ? { resultado: resultadoFinal } : {}),
+        ...(dados.resultado !== undefined ? { resultado: resultadoFinal } : {}),
         ...(dados.observacoes !== undefined ? { observacoes: dados.observacoes } : {}),
         codigo,
         numero,

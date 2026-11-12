@@ -8,6 +8,13 @@
       "when": 1793886855396,
       "tag": "0000_pink_mathemanic",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794489151495,
+      "tag": "0001_striped_star_brand",
+      "breakpoints": true
     }
   ]
 }

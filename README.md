@@ -9,7 +9,7 @@ Integração do frontend React/Vite com a API Fastify/TypeScript e PostgreSQL.
 - Rotas administrativas protegidas: resumo, pesquisa de certificações e cadastro de atas.
 - Consulta pública de autenticidade por código, sem login.
 - Dashboard com contadores reais do banco.
-- Cadastro de atas com 1 a 50 concluintes, validação de CPF no servidor e geração sequencial dos códigos para aprovados.
+- Cadastro de atas com 1 a 50 concluintes, validação de CPF no servidor e geração sequencial dos códigos para aprovados. CPF é obrigatório; os demais dados do concluinte podem ficar vazios. Campos de texto vazios são registrados como `XXXXXX`, e campos numéricos/resultado permanecem vazios.
 - Pesquisa de certificações por nome, CPF, município e curso; exportação dos resultados exibidos para CSV.
 - Layout responsivo preservando a identidade visual do protótipo original.
 - Docker Compose com PostgreSQL persistente, backend, frontend e migrações automáticas.
